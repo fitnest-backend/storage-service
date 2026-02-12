@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package az.fitnest.terabox;
 
+option go_package = "github.com/fitnest/media-service/internal/pb/workerpb;workerpb";
+
 service TeraBoxWorker {
   rpc UploadFile (UploadFileRequest) returns (UploadFileResponse);
   rpc FetchFileList (FetchFileListRequest) returns (FetchFileListResponse);
