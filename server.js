@@ -1,5 +1,8 @@
 const grpc = require('@grpc/grpc-js');
 const workerProto = require('./proto');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
 
 const TeraboxUploader = require(process.env.TERABOX_SCRIPT_PATH || 'terabox-upload-tool');
 
@@ -14,13 +17,17 @@ const uploader = new TeraboxUploader({
 
 
 async function UploadFile(call, callback) {
-    const { file_path, directory } = call.request;
-    if (!file_path) {
-        return callback({ code: grpc.status.INVALID_ARGUMENT, message: 'file_path is required' });
+    const { file_data, filename, directory } = call.request;
+    if (!file_data) {
+        return callback({ code: grpc.status.INVALID_ARGUMENT, message: 'file_data is required' });
     }
 
+    // Create temp file with the data
+    const tempPath = path.join(os.tmpdir(), 'upload-' + Date.now() + path.extname(filename));
+    fs.writeFileSync(tempPath, file_data);
+
     try {
-        const result = await uploader.uploadFile(file_path, false, directory);
+        const result = await uploader.uploadFile(tempPath, false, directory);
         if (!result.success) {
             return callback({ code: grpc.status.INTERNAL, message: result.message });
         }
@@ -32,6 +39,13 @@ async function UploadFile(call, callback) {
     } catch (err) {
         console.error('Upload failed', err);
         callback({ code: grpc.status.INTERNAL, message: err.message || 'Upload failed' });
+    } finally {
+        // Clean up temp file
+        try {
+            fs.unlinkSync(tempPath);
+        } catch (cleanupErr) {
+            console.error('Failed to clean up temp file:', cleanupErr);
+        }
     }
 }
 
