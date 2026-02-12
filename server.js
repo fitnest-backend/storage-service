@@ -24,6 +24,8 @@ async function UploadFile(call, callback) {
         return callback({ code: grpc.status.INVALID_ARGUMENT, message: 'file_data is required' });
     }
 
+    console.log('terabox-worker: UploadFile called, bdstoken present:', !!config.bdstoken);
+
     // Create temp file with the data
     const tempPath = path.join(os.tmpdir(), 'upload-' + Date.now() + path.extname(filename));
     fs.writeFileSync(tempPath, file_data);
@@ -31,6 +33,7 @@ async function UploadFile(call, callback) {
     try {
         let result = await uploader.uploadFile(tempPath, false, directory);
         if (!result.success) {
+            console.log('terabox-worker: Upload failed with message:', result.message);
             return callback({ code: grpc.status.INTERNAL, message: result.message });
         }
         callback(null, {
