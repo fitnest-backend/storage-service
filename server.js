@@ -3,7 +3,7 @@ const workerProto = require('./proto');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const puppeteer = require('puppeteer');
+const crypto = require('crypto');
 
 const TeraboxUploader = require(process.env.TERABOX_SCRIPT_PATH || 'terabox-upload-tool');
 
@@ -126,56 +126,92 @@ async function DeleteFiles(call, callback) {
 }
 
 async function refreshTokens() {
-    const browser = await puppeteer.launch({
-        headless: "new",
-        executablePath: '/usr/bin/chromium',
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--disable-software-rasterizer', '--no-first-run', '--disable-default-apps']
-    });
-    const page = await browser.newPage();
-    await page.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-
     try {
-        await page.goto('https://www.terabox.com/', { timeout: 60000 });
-        // Wait for login button and click
-        await page.waitForSelector('.login-btn', { timeout: 10000 });
-        await page.click('.login-btn');
+        // Get public key for password encryption
+        const pubKeyRes = await fetch('https://passport.baidu.com/v2/getpublickey');
+        const pubKeyData = await pubKeyRes.json();
+        const pubkey = pubKeyData.pubkey;
 
-        // Wait for login form
-        await page.waitForSelector('#TANGRAM__PSP_4__userName', { timeout: 10000 });
-        await page.type('#TANGRAM__PSP_4__userName', process.env.TERABOX_USERNAME);
-        await page.type('#TANGRAM__PSP_4__password', process.env.TERABOX_PASSWORD);
-        await page.click('#TANGRAM__PSP_4__submit');
+        // Encrypt password
+        const encryptedPwd = crypto.publicEncrypt(pubkey, Buffer.from(process.env.TERABOX_PASSWORD)).toString('base64');
 
-        // Wait for login success
-        await page.waitForNavigation({ waitUntil: 'networkidle0' });
+        // Get jsToken from home/info
+        const homeRes = await fetch('https://www.terabox.com/api/home/info');
+        const homeData = await homeRes.json();
+        const jsToken = homeData.jsToken || '';
 
-        // Extract cookies
-        const cookies = await page.cookies();
-        const ndus = cookies.find(c => c.name === 'ndus')?.value;
-        const bdstoken = cookies.find(c => c.name === 'BDUSS')?.value || '';
-
-        // Get jsToken from API
-        const apiResponse = await page.evaluate(async () => {
-            try {
-                const res = await fetch('https://www.terabox.com/api/home/info', {
-                    credentials: 'include'
-                });
-                const data = await res.json();
-                return data.jsToken;
-            } catch (e) {
-                return '';
-            }
+        // Login request
+        const loginUrl = `https://www.terabox.com/passport/login?app_id=250528&web=1&channel=dubox&clienttype=0&version=0&devuid=0&cuid=0&lang=en&jt=&app=universe&reg_source=home&jsToken=${jsToken}`;
+        const loginBody = new URLSearchParams({
+            client: 'web',
+            pass_version: '2.8',
+            lang: 'en',
+            clientfrom: 'h5',
+            pcftoken: '39cd57946219468e8594f2ac875e81c2', // placeholder, may need to generate
+            prand: '57b38d7cd5ffb33c9559791ce1f25fe478ba0149', // placeholder
+            email: process.env.TERABOX_USERNAME,
+            pwd: encryptedPwd,
+            seval: 'ef3f97f3bbfc141943605bb820f8a0ce', // placeholder
+            random: '9', // placeholder
+            identity: '',
+            g_identity: '',
+            vcode: '',
+            vcode_str: '',
+            timestamp: Math.floor(Date.now() / 1000).toString(),
+            need_merge: '0',
+            ymg_token: 'fc63e837b0e417624b3798edcb95adbfac64eb0029065d819c2cdba0600b2ffe3c870a66665b6a89b1c745e68c799a21a8a7a89683a27ed8ea7533139564e39a8583fa554050002b1311721aeb6e7d2f6efa070394d46c75488d1e968a7a386a7594d23767bb7151b484c32311de8990fa7b3c71989357ec17a3a9a7cb091478', // placeholder
+            op_type: '2',
+            reg_source: 'home',
+            psign: '0'
         });
 
-        const jsToken = apiResponse || '';
+        const loginRes = await fetch(loginUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
+                'Referer': 'https://www.terabox.com/'
+            },
+            body: loginBody
+        });
+
+        const loginData = await loginRes.json();
+        if (loginData.errno !== 0) {
+            throw new Error(`Login failed: ${loginData.errmsg}`);
+        }
+
+        // Extract cookies from response
+        const setCookies = loginRes.headers.get('set-cookie');
+        const cookies = {};
+        if (setCookies) {
+            setCookies.split(',').forEach(cookie => {
+                const [nameValue] = cookie.split(';');
+                const [name, value] = nameValue.split('=');
+                cookies[name.trim()] = value;
+            });
+        }
+
+        const ndus = cookies.ndus;
+        const bdstoken = cookies.BDUSS;
+
+        // Get jsToken with cookies
+        const cookieString = Object.entries(cookies).map(([k, v]) => `${k}=${v}`).join('; ');
+        const infoRes = await fetch('https://www.terabox.com/api/home/info', {
+            headers: {
+                'Cookie': cookieString
+            }
+        });
+        const infoData = await infoRes.json();
+        const updatedJsToken = infoData.jsToken || jsToken;
+
         const appId = '250528';
-        const browserId = '12345678'; // placeholder, perhaps generate
+        const browserId = '12345678';
 
         // Update the uploader
         uploader = new TeraboxUploader({
             ndus,
             appId,
-            jsToken,
+            jsToken: updatedJsToken,
             bdstoken,
             browserId
         });
@@ -183,8 +219,6 @@ async function refreshTokens() {
         console.log('Tokens refreshed successfully');
     } catch (err) {
         console.error('Failed to refresh tokens', err);
-    } finally {
-        await browser.close();
     }
 }
 
