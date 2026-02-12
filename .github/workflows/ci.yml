@@ -8,7 +8,7 @@ on:
       - production
 
 env:
-  IMAGE_NAME: ghcr.io/fitnest-backend/terabox-worker
+  IMAGE_NAME: ghcr.io/fitnest-backend/terabox-worker-service
   HELM_VALUES_FILE: values.yaml
 
 jobs:
