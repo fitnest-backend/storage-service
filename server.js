@@ -12,71 +12,7 @@ const config = {
     appId: '250528',
     jsToken: 'BB04F91D937F292A33FB2D21F7B47DA91B1C8EF6D73EE1123956827E6A3BE9E23C0B3085FD444331EFF8EB31596E3C597C3D9531FBBD5664DAC8EDAD7A91BF00',
     bdstoken: 'e6752242f4f441b90064a7b220042c60',
-    browserId: '1509IaJc0mCa5RYruyP3etYaUR3RwuBiZaDDEIpR4PUYFkT8WQlbFEZUS2Y=',
-    dpLogId: '44614000362414170033'
-};
-
-function buildListUrl(appId, directory, jsToken, dpLogId) {
-  return `https://www.1024terabox.com/api/list?app_id=${appId}&web=1&channel=dubox&clienttype=0&jsToken=${jsToken}&dp-logid=${dpLogId}&order=time&desc=1&dir=${encodeURIComponent(directory)}&num=100&page=1&showempty=0`;
-}
-
-const deleteFile = async (filelist, config) => {
-  const { appId, jsToken, browserId, ndus, dpLogId } = config;
-  const url = "https://www.1024terabox.com/api/filemanager";
-
-  const params = {
-    opera: "delete",
-    app_id: appId,
-    jsToken: jsToken,
-    "dp-logid": dpLogId,
-  };
-
-  const data = new URLSearchParams();
-  data.append("filelist", JSON.stringify(filelist));
-
-  const headers = {
-    "Cookie": `browserid=${browserId}; ndus=${ndus};`,
-  };
-
-  try {
-    const response = await axios.post(url, data.toString(), {
-      headers,
-      params,
-    });
-    return response.data;
-  } catch (error) {
-    throw error.response ? error.response.data : error.message;
-  }
-};
-
-const moveFile = async (filelist, config) => {
-  const { appId, jsToken, browserId, ndus, dpLogId } = config;
-  const url = "https://www.1024terabox.com/api/filemanager";
-
-  const params = {
-    opera: "move",
-    app_id: appId,
-    jsToken: jsToken,
-    "dp-logid": dpLogId,
-  };
-
-  const data = new URLSearchParams();
-  data.append("filelist", JSON.stringify(filelist));
-
-  const headers = {
-    "Cookie": `browserid=${browserId}; ndus=${ndus};`,
-    "Content-Type": "application/x-www-form-urlencoded",
-  };
-
-  try {
-    const response = await axios.post(url, data.toString(), {
-      headers,
-      params,
-    });
-    return response.data;
-  } catch (error) {
-    throw error.response ? error.response.data : error.message;
-  }
+    browserId: '1509IaJc0mCa5RYruyP3etYaUR3RwuBiZaDDEIpR4PUYFkT8WQlbFEZUS2Y='
 };
 
 let uploader = new TeraboxUploader(config);
@@ -119,15 +55,11 @@ async function FetchFileList(call, callback) {
     const { directory = '/' } = call.request;
 
     try {
-        const url = buildListUrl(config.appId, directory, config.jsToken, config.dpLogId);
-        const headers = {
-            "Cookie": `browserid=${config.browserId}; ndus=${config.ndus};`,
-        };
-        const response = await axios.get(url, { headers });
+        const result = await uploader.fetchFileList(directory);
         callback(null, {
-            success: true,
-            message: 'File list fetched',
-            data: response.data.list || []
+            success: result.success,
+            message: result.message,
+            data: result.data.list || []
         });
     } catch (err) {
         console.error('Fetch file list failed', err);
@@ -161,9 +93,8 @@ async function MoveFile(call, callback) {
     }
 
     try {
-        const filelist = [{ path: old_path, dest: new_path, newname: new_name }];
-        const result = await moveFile(filelist, config);
-        callback(null, { success: true, message: 'File moved successfully' });
+        const result = await uploader.moveFiles(old_path, new_path, new_name);
+        callback(null, { success: result.success, message: result.message });
     } catch (err) {
         console.error('Move failed', err);
         callback({ code: grpc.status.INTERNAL, message: err.message || 'Move failed' });
@@ -177,9 +108,8 @@ async function DeleteFiles(call, callback) {
     }
 
     try {
-        const filelist = paths.map(path => ({ path }));
-        const result = await deleteFile(filelist, config);
-        callback(null, { success: true, message: 'Files deleted' });
+        const result = await uploader.deleteFiles(paths.map(path => ({ path })));
+        callback(null, { success: result.success, message: result.message });
     } catch (err) {
         console.error('Delete failed', err);
         callback({ code: grpc.status.INTERNAL, message: err.message || 'Delete failed' });
