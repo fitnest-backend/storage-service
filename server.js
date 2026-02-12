@@ -8,7 +8,7 @@ const crypto = require('crypto');
 const TeraboxUploader = require(process.env.TERABOX_SCRIPT_PATH || 'terabox-upload-tool');
 
 let uploader = new TeraboxUploader({
-    ndus: 'Yb8V8X8peHuikuUuDEyXwXOLnuCK3gSvD7lvYUsD',
+    ndus: 'Yb8V8X8peHuiJtOYHXFKDONhgKtqm-0Ymt8erKz0',
     appId: '250528',
     uploadId: process.env.TERABOX_UPLOAD_ID || '',
     jsToken: 'EEAA220681598B4B9F065E950B04E2B0B86C83FE21640648FE96C0A179DEF9971F2F3458FD24A0330A2F450B8CB7BE59D17B19EA0C2ED36576F75E7F8BCF3DF0012A788F59A9B9A814CC168B0D55E89F0CE12EDC69378472537059AEC8D99443',
