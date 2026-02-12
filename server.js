@@ -3,10 +3,11 @@ const workerProto = require('./proto');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const puppeteer = require('puppeteer');
 
 const TeraboxUploader = require(process.env.TERABOX_SCRIPT_PATH || 'terabox-upload-tool');
 
-const uploader = new TeraboxUploader({
+let uploader = new TeraboxUploader({
     ndus: process.env.TERABOX_NDUS,
     appId: process.env.TERABOX_APP_ID,
     uploadId: process.env.TERABOX_UPLOAD_ID,
@@ -27,7 +28,12 @@ async function UploadFile(call, callback) {
     fs.writeFileSync(tempPath, file_data);
 
     try {
-        const result = await uploader.uploadFile(tempPath, false, directory);
+        let result = await uploader.uploadFile(tempPath, false, directory);
+        if (!result.success && result.message.includes('user not login')) {
+            console.log('Authentication failed, refreshing tokens...');
+            await refreshTokens();
+            result = await uploader.uploadFile(tempPath, false, directory);
+        }
         if (!result.success) {
             return callback({ code: grpc.status.INTERNAL, message: result.message });
         }
@@ -116,6 +122,64 @@ async function DeleteFiles(call, callback) {
     } catch (err) {
         console.error('Delete failed', err);
         callback({ code: grpc.status.INTERNAL, message: err.message || 'Delete failed' });
+    }
+}
+
+async function refreshTokens() {
+    const browser = await puppeteer.launch({ headless: true });
+    const page = await browser.newPage();
+
+    try {
+        await page.goto('https://www.terabox.com/');
+        // Wait for login button and click
+        await page.waitForSelector('.login-btn', { timeout: 10000 });
+        await page.click('.login-btn');
+
+        // Wait for login form
+        await page.waitForSelector('#TANGRAM__PSP_4__userName', { timeout: 10000 });
+        await page.type('#TANGRAM__PSP_4__userName', process.env.TERABOX_USERNAME);
+        await page.type('#TANGRAM__PSP_4__password', process.env.TERABOX_PASSWORD);
+        await page.click('#TANGRAM__PSP_4__submit');
+
+        // Wait for login success
+        await page.waitForNavigation({ waitUntil: 'networkidle0' });
+
+        // Extract cookies
+        const cookies = await page.cookies();
+        const ndus = cookies.find(c => c.name === 'ndus')?.value;
+        const bdstoken = cookies.find(c => c.name === 'BDUSS')?.value || '';
+
+        // Get jsToken from API
+        const apiResponse = await page.evaluate(async () => {
+            try {
+                const res = await fetch('https://www.terabox.com/api/home/info', {
+                    credentials: 'include'
+                });
+                const data = await res.json();
+                return data.jsToken;
+            } catch (e) {
+                return '';
+            }
+        });
+
+        const jsToken = apiResponse || '';
+        const appId = '250528';
+        const browserId = '12345678'; // placeholder, perhaps generate
+
+        // Update the uploader
+        uploader = new TeraboxUploader({
+            ndus,
+            appId,
+            jsToken,
+            bdstoken,
+            browserId
+        });
+
+        console.log('Tokens refreshed successfully');
+    } catch (err) {
+        console.error('Failed to refresh tokens', err);
+    } finally {
+        await browser.close();
     }
 }
 
