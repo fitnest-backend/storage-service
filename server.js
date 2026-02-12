@@ -11,7 +11,7 @@ const uploader = new TeraboxUploader({
     browserId: process.env.TERABOX_BROWSER_ID,
 });
 
-async function uploadFile(call, callback) {
+async function UploadFile(call, callback) {
     const { file_path, directory } = call.request;
     if (!file_path) {
         return callback({ code: grpc.status.INVALID_ARGUMENT, message: 'file_path is required' });
