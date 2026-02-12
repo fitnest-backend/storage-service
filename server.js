@@ -126,7 +126,11 @@ async function DeleteFiles(call, callback) {
 }
 
 async function refreshTokens() {
-    const browser = await puppeteer.launch({ headless: true });
+    const browser = await puppeteer.launch({
+        headless: true,
+        executablePath: '/usr/bin/google-chrome-stable',
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
     const page = await browser.newPage();
 
     try {
