@@ -5,7 +5,7 @@ const protoLoader = require('@grpc/proto-loader');
 const PROTO_PATH = path.join(__dirname, 'proto', 'worker.proto');
 
 const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
-    keepCase: true,
+    keepCase: false,
     longs: String,
     enums: String,
     defaults: true,

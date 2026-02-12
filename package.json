@@ -4,11 +4,16 @@
   "description": "Standalone gRPC worker for TeraBox integration",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "generate": "grpc_tools_node_protoc --js_out=import_style=commonjs,binary:./proto --grpc_out=grpc_js:./proto ./proto/worker.proto",
+    "generate-ts": "grpc_tools_node_protoc --plugin=protoc-gen-ts=./node_modules/.bin/protoc-gen-ts --ts_out=grpc_js:./proto --js_out=import_style=commonjs,binary:./proto --grpc_out=grpc_js:./proto ./proto/worker.proto"
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.9.0",
     "@grpc/proto-loader": "^0.7.10",
     "terabox-upload-tool": "^1.0.8"
+  },
+  "devDependencies": {
+    "grpc-tools": "^1.12.4"
   }
 }
