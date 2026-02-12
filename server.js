@@ -35,7 +35,7 @@ async function UploadFile(call, callback) {
     }
 }
 
-async function fetchFileList(call, callback) {
+async function FetchFileList(call, callback) {
     const { directory = '/' } = call.request;
 
     try {
@@ -56,7 +56,7 @@ async function fetchFileList(call, callback) {
     }
 }
 
-async function downloadFile(call, callback) {
+async function DownloadFile(call, callback) {
     const { file_id } = call.request;
     if (!file_id) {
         return callback({ code: grpc.status.INVALID_ARGUMENT, message: 'file_id is required' });
@@ -75,7 +75,7 @@ async function downloadFile(call, callback) {
     }
 }
 
-async function moveFile(call, callback) {
+async function MoveFile(call, callback) {
     const { old_path, new_path, new_name } = call.request;
     if (!old_path || !new_path) {
         return callback({ code: grpc.status.INVALID_ARGUMENT, message: 'old_path and new_path are required' });
@@ -90,7 +90,7 @@ async function moveFile(call, callback) {
     }
 }
 
-async function deleteFiles(call, callback) {
+async function DeleteFiles(call, callback) {
     const { paths } = call.request;
     if (!paths || paths.length === 0) {
         return callback({ code: grpc.status.INVALID_ARGUMENT, message: 'paths array is required' });
@@ -112,11 +112,11 @@ function main() {
     console.log('service:', workerProto.TeraBoxWorker ? workerProto.TeraBoxWorker.service : 'undefined');
     try {
         server.addService(workerProto.TeraBoxWorker.service, {
-            uploadFile,
-            fetchFileList,
-            downloadFile,
-            moveFile,
-            deleteFiles
+            UploadFile,
+            FetchFileList,
+            DownloadFile,
+            MoveFile,
+            DeleteFiles
         });
         console.log('Service added successfully');
     } catch (err) {
@@ -134,3 +134,6 @@ function main() {
 }
 
 main();
+
+
+
