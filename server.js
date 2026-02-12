@@ -112,11 +112,11 @@ function main() {
     console.log('service:', workerProto.TeraBoxWorker ? workerProto.TeraBoxWorker.service : 'undefined');
     try {
         server.addService(workerProto.TeraBoxWorker.service, {
-            uploadFile: UploadFile,
-            fetchFileList: FetchFileList,
-            downloadFile: DownloadFile,
-            moveFile: MoveFile,
-            deleteFiles: DeleteFiles
+            UploadFile: UploadFile,
+            FetchFileList: FetchFileList,
+            DownloadFile: DownloadFile,
+            MoveFile: MoveFile,
+            DeleteFiles: DeleteFiles
         });
         console.log('Service added successfully');
     } catch (err) {
