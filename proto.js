@@ -12,6 +12,6 @@ const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
     oneofs: true,
 });
 
-const workerProto = grpc.loadPackageDefinition(packageDefinition).az.fitnest.terabox;
+const workerProto = grpc.loadPackageDefinition(packageDefinition).workerpb;
 
 module.exports = workerProto;
