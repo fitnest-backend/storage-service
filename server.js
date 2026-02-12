@@ -107,6 +107,9 @@ async function deleteFiles(call, callback) {
 
 function main() {
     const server = new grpc.Server();
+    console.log('workerProto:', workerProto);
+    console.log('TeraBoxWorker:', workerProto.TeraBoxWorker);
+    console.log('service:', workerProto.TeraBoxWorker ? workerProto.TeraBoxWorker.service : 'undefined');
     server.addService(workerProto.TeraBoxWorker.service, {
         uploadFile,
         fetchFileList,
