@@ -110,13 +110,18 @@ function main() {
     console.log('workerProto:', workerProto);
     console.log('TeraBoxWorker:', workerProto.TeraBoxWorker);
     console.log('service:', workerProto.TeraBoxWorker ? workerProto.TeraBoxWorker.service : 'undefined');
-    server.addService(workerProto.TeraBoxWorker.service, {
-        uploadFile,
-        fetchFileList,
-        downloadFile,
-        moveFile,
-        deleteFiles
-    });
+    try {
+        server.addService(workerProto.TeraBoxWorker.service, {
+            uploadFile,
+            fetchFileList,
+            downloadFile,
+            moveFile,
+            deleteFiles
+        });
+        console.log('Service added successfully');
+    } catch (err) {
+        console.error('Error adding service:', err);
+    }
 
     const port = process.env.TERABOX_WORKER_PORT || 9090;
     server.bindAsync(`0.0.0.0:${port}`, grpc.ServerCredentials.createInsecure(), (err, port) => {
