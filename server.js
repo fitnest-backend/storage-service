@@ -20,15 +20,13 @@ async function UploadFile(call, callback) {
 
     try {
         const result = await uploader.uploadFile(file_path, false, directory);
+        if (!result.success) {
+            return callback({ code: grpc.status.INTERNAL, message: result.message });
+        }
         callback(null, {
             success: true,
             message: 'File uploaded successfully',
-            data: {
-                fs_id: result.fs_id,
-                path: result.path,
-                server_filename: result.server_filename,
-                size: result.size
-            }
+            data: result.fileDetails
         });
     } catch (err) {
         console.error('Upload failed', err);
