@@ -1,7 +1,6 @@
 const grpc = require('@grpc/grpc-js');
 const workerProto = require('./proto');
 
-
 const TeraboxUploader = require(process.env.TERABOX_SCRIPT_PATH || 'terabox-upload-tool');
 
 const uploader = new TeraboxUploader({
