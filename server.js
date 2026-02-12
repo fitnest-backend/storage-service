@@ -9,6 +9,7 @@ const uploader = new TeraboxUploader({
     uploadId: process.env.TERABOX_UPLOAD_ID,
     jsToken: process.env.TERABOX_JS_TOKEN,
     browserId: process.env.TERABOX_BROWSER_ID,
+    bdstoken: process.env.TERABOX_BDSTOKEN,
 });
 
 
