@@ -124,7 +124,7 @@ function main() {
         console.error('Error adding service:', err);
     }
 
-    const port = process.env.TERABOX_WORKER_PORT || 9090;
+    const port = 4000;
     server.bindAsync(`0.0.0.0:${port}`, grpc.ServerCredentials.createInsecure(), (err, port) => {
         if (err != null) {
             return console.error(err);
