@@ -7,6 +7,10 @@ on:
       - staging
       - production
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   IMAGE_NAME: ghcr.io/fitnest-backend/terabox-worker-service
   HELM_VALUES_FILE: values.yaml
@@ -120,5 +124,5 @@ jobs:
           curl -k -X POST \
             -H "Authorization: Bearer ${ARGOCD_TOKEN}" \
             -H "Content-Type: application/json" \
-            http://161.97.183.7:31052/api/v1/applications/terabox-worker-service-dev/sync \
+            http://161.97.183.7:31052/api/v1/applications/fitnest-terabox-worker-service-dev/sync \
             -d '{}'
