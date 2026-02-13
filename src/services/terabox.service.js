@@ -109,19 +109,23 @@ class TeraboxService {
                 path: `${directory}/${fileName}`,
                 uploadid: uploadId,
                 uploadsign: '0',
-                partseq: '0'
+                partseq: '0',
+                jsToken: config.credentials.jsToken,
+                bdstoken: config.credentials.bdstoken
             };
 
             const formData = new FormData();
             formData.append('file', fs.createReadStream(filePath));
 
-            console.log(`Uploading file data to ${uploadUrl}`);
+            console.log(`Uploading file data to ${uploadUrl} with params and cookies`);
             const uploadRes = await axios.post(uploadUrl, formData, {
                 params: uploadParams,
                 headers: {
                     ...this.getCommonHeaders(),
                     ...formData.getHeaders()
-                }
+                },
+                maxContentLength: Infinity,
+                maxBodyLength: Infinity
             });
 
             if (uploadRes.data.errno && uploadRes.data.errno !== 0) {
