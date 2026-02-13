@@ -12,9 +12,7 @@ class TeraboxService {
     }
 
     _generateLogId() {
-        const timestamp = Date.now().toString();
-        const random = Math.random().toString().substring(2);
-        return Buffer.from(`${timestamp}.${random}`).toString('base64');
+        return crypto.randomBytes(16).toString('hex');
     }
 
     getCommonHeaders() {
