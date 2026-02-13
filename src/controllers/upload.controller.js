@@ -93,7 +93,7 @@ async function downloadFile(req, res) {
 
 async function deleteFiles(req, res) {
     try {
-        const paths = req.body.paths;
+        const paths = req.body;
         if (!paths || !Array.isArray(paths)) {
             return res.status(400).json({ success: false, message: 'paths array is required' });
         }
