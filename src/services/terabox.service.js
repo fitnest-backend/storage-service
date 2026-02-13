@@ -11,6 +11,12 @@ class TeraboxService {
         this.userAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15';
     }
 
+    _generateLogId() {
+        const timestamp = Date.now().toString();
+        const random = Math.random().toString().substring(2);
+        return Buffer.from(`${timestamp}.${random}`).toString('base64');
+    }
+
     getCommonHeaders() {
         const creds = config.credentials;
         const cookieStr = [
@@ -99,19 +105,22 @@ class TeraboxService {
             // Actually, the user says "all calls MUST go to dm.terabox.com". Let's try that first for create/precreate.
             // For the actual file data, we use the superfile2 API.
 
-            const uploadUrl = `https://c-jp.1024terabox.com/rest/2.0/pcs/superfile2`;
+            // Step 2: Upload bits
+            // Browser uses szb-cdata.terabox.com for this session
+            const uploadHost = precreateRes.data.host || 'szb-cdata.terabox.com';
+            const uploadUrl = `https://${uploadHost}/rest/2.0/pcs/superfile2`;
+
             const uploadParams = {
                 method: 'upload',
                 app_id: config.credentials.appId,
                 channel: 'dubox',
                 clienttype: '0',
                 web: '1',
+                logid: this._generateLogId(),
                 path: `${directory}/${fileName}`,
                 uploadid: uploadId,
                 uploadsign: '0',
-                partseq: '0',
-                jsToken: config.credentials.jsToken,
-                bdstoken: config.credentials.bdstoken
+                partseq: '0'
             };
 
             const formData = new FormData();
@@ -125,7 +134,9 @@ class TeraboxService {
                     ...formData.getHeaders()
                 },
                 maxContentLength: Infinity,
-                maxBodyLength: Infinity
+                maxBodyLength: Infinity,
+                // Ensure cookies are parsed and sent correctly if the host is different
+                withCredentials: true
             });
 
             if (uploadRes.data.errno && uploadRes.data.errno !== 0) {
