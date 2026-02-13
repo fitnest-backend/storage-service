@@ -1,25 +1,26 @@
 const teraboxService = require('../services/terabox.service');
-const fs = require('fs');
+const fs = require('fs').promises;
 const path = require('path');
-const os = require('os');
 
 async function uploadFile(req, res) {
     try {
         const file = req.file;
         if (!file) {
+            console.error('Upload attempt with no file');
             return res.status(400).json({ success: false, message: 'No file uploaded' });
         }
 
-        // Save the file temporarily
-        const tempPath = path.join(os.tmpdir(), 'upload-' + Date.now() + path.extname(file.originalname));
-        fs.writeFileSync(tempPath, file.buffer);
+        console.log(`Received file: ${file.originalname}, stored at: ${file.path}, size: ${file.size}`);
 
-        const directory = req.body.directory || '/uploads';
-        const result = await teraboxService.uploadFile(tempPath, directory);
+        const directory = req.query.directory || req.body.directory || '/uploads';
+        console.log(`Uploading to TeraBox directory: ${directory}`);
+
+        const result = await teraboxService.uploadFile(file.path, directory);
+        console.log('TeraBox service result:', JSON.stringify(result));
 
         // Clean up temp file
         try {
-            fs.unlinkSync(tempPath);
+            await fs.unlink(file.path);
         } catch (cleanupErr) {
             console.error('Failed to clean up temp file:', cleanupErr);
         }
@@ -31,13 +32,22 @@ async function uploadFile(req, res) {
                 data: result.fileDetails
             });
         } else {
+            console.error('TeraBox upload failed logic:', result.message);
             res.status(500).json({
                 success: false,
                 message: result.message
             });
         }
     } catch (error) {
-        console.error('Upload error:', error);
+        console.error('Upload controller error:', error);
+        if (req.file && req.file.path) {
+            try {
+                await fs.unlink(req.file.path);
+            } catch (unlinkError) {
+                // Log the error but don't fail the main request because of cleanup failure
+                console.error('Failed to clean up temp file in error handler:', unlinkError);
+            }
+        }
         res.status(500).json({
             success: false,
             message: error.message || 'Upload failed'

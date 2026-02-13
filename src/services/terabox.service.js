@@ -8,6 +8,7 @@ class TeraboxService {
 
     async uploadFile(filePath, directory = '/uploads', showProgress = false) {
         try {
+            // Re-order arguments if needed by the tool, media-service uses (filePath, showProgress, directory)
             const result = await this.uploader.uploadFile(filePath, showProgress, directory);
             return {
                 success: result.success,
@@ -15,6 +16,7 @@ class TeraboxService {
                 message: result.message
             };
         } catch (error) {
+            console.error('TeraBoxUploader.uploadFile error:', error);
             throw new Error(`Upload failed: ${error.message}`);
         }
     }
