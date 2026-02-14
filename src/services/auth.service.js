@@ -53,64 +53,65 @@ class AuthService {
             // Set viewport to a standard desktop size
             await page.setViewport({ width: 1280, height: 800 });
 
+            // 5. Wait for successful login
             console.log('[AuthService] Navigating to login page...');
-            await page.goto('https://www.terabox.com/indonesian/index', { waitUntil: 'networkidle2', timeout: 60000 });
+            await page.goto('https://www.terabox.com/ai/index', { waitUntil: 'networkidle2', timeout: 60000 });
 
-            // 1. Click the main Login button if present
+            // 1. Click the main Login button
             console.log('[AuthService] Waiting for login button...');
             try {
+                // Selector: <div data-v-f8b538de="" class="login-btn">Login</div>
+                // Using class .login-btn as primary selector
                 await page.waitForSelector('.login-btn', { visible: true, timeout: 10000 });
                 await page.click('.login-btn');
             } catch (e) {
-                console.log('[AuthService] Login button not found or already on login screen.');
+                console.log('[AuthService] Login button not found or specific selector issue: ' + e.message);
             }
 
-            // 2. Wait for login modal and switch to Email Login
-            console.log('[AuthService] Waiting for login modal...');
-            await page.waitForSelector('.new-login-dialog', { visible: true, timeout: 30000 });
-
-            // Look for "Login with account" - usually a small icon or text at bottom
-            // Try to find if inputs are visible first
-            const emailInputSelector = 'input[name="userName"]';
-            const passwordInputSelector = 'input[name="password"]';
-            // Note: Selectors might be dynamic or generic like .passport-login-input
-            // Based on common TeraBox structure:
-
-            // Attempt to switch to password login if inputs are not visible
-            const inputsVisible = await page.$(emailInputSelector);
-            if (!inputsVisible) {
-                console.log('[AuthService] Switching to account login...');
-                // Try to find the switch element. Often a class like 'qrcode-img' or 'login-switch'
-                // Or "Log in with account" text
-                try {
-                    const switchBtn = await page.waitForSelector('.change-login-type', { timeout: 5000 });
-                    if (switchBtn) await switchBtn.click();
-                } catch (e) {
-                    console.log('[AuthService] switch button not found via selector, trying alternates...');
-                    // Try generic click on bottom right of modal? No, unreliable.
-                }
+            // 2. Click logo/switch button to enable email login
+            // Selector: <div data-v-e2756740="" class="logo"><img ...></div>
+            console.log('[AuthService] Looking for login mode switch (logo)...');
+            try {
+                // The user pointed to an image inside a div with class "logo"
+                const switchSelector = '.logo img';
+                await page.waitForSelector(switchSelector, { visible: true, timeout: 10000 });
+                await page.click(switchSelector);
+            } catch (e) {
+                console.log('[AuthService] Logo switch button not found (might already be in correct mode or selector mismatch): ' + e.message);
             }
 
             // 3. Enter credentials
             console.log('[AuthService] Entering credentials...');
-            // Wait specifically for the email input. TeraBox often uses name="userName"
-            await page.waitForSelector('input[name="userName"], #email-input, .input-user', { visible: true });
 
-            // Clear and type
-            await page.focus('input[name="userName"]');
-            await page.keyboard.down('Control');
-            await page.keyboard.press('A');
-            await page.keyboard.up('Control');
-            await page.keyboard.press('Backspace');
-            await page.type('input[name="userName"]', this.email, { delay: 100 });
+            // Email Input: <input ... id="email-input" ...>
+            await page.waitForSelector('#email-input', { visible: true });
 
-            await page.focus('input[name="password"]');
-            await page.type('input[name="password"]', this.password, { delay: 100 });
+            // Clear and type email
+            await page.click('#email-input'); // Focus
+            const emailValue = await page.$eval('#email-input', el => el.value);
+            if (emailValue) {
+                await page.click('#email-input', { clickCount: 3 });
+                await page.keyboard.press('Backspace');
+            }
+            await page.type('#email-input', this.email, { delay: 100 });
+
+            // Password Input: <input ... id="pwd-input" ...>
+            await page.waitForSelector('#pwd-input', { visible: true });
+
+            // Clear and type password
+            await page.click('#pwd-input'); // Focus
+            const pwdValue = await page.$eval('#pwd-input', el => el.value);
+            if (pwdValue) {
+                await page.click('#pwd-input', { clickCount: 3 });
+                await page.keyboard.press('Backspace');
+            }
+            await page.type('#pwd-input', this.password, { delay: 100 });
 
             // 4. Click Login
+            // Login Btn: <div ... class="btn-class-login ...">Login</div>
             console.log('[AuthService] Clicking submit...');
-            await page.waitForSelector('.login-submit:not(.login-submit-disabled), .btn-class-login', { visible: true });
-            await page.click('.login-submit, .btn-class-login');
+            await page.waitForSelector('.btn-class-login', { visible: true });
+            await page.click('.btn-class-login');
 
             // 5. Wait for successful login
             console.log('[AuthService] Waiting for login completion...');
