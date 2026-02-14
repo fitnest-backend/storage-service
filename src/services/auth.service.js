@@ -65,23 +65,47 @@ class AuthService {
             console.log('[AuthService] Waiting for login button...');
             try {
                 // Selector: <div data-v-f8b538de="" class="login-btn">Login</div>
-                // Using class .login-btn as primary selector
-                await page.waitForSelector('.login-btn', { visible: true, timeout: 10000 });
-                await page.click('.login-btn');
+                const loginBtnSelector = 'div.login-btn[data-v-f8b538de]';
+                await page.waitForSelector(loginBtnSelector, { visible: true, timeout: 10000 });
+                console.log('[AuthService] Found login button, clicking...');
+
+                // Try standard click first
+                await page.click(loginBtnSelector).catch(async () => {
+                    console.log('[AuthService] Standard click failed, trying evaluate click...');
+                    await page.$eval(loginBtnSelector, el => el.click());
+                });
             } catch (e) {
-                console.log('[AuthService] Login button not found or specific selector issue: ' + e.message);
+                console.log('[AuthService] Login button not found (data-v-f8b538de) or error: ' + e.message);
+                // Fallback to generic class just in case data attribute changed
+                try {
+                    await page.waitForSelector('.login-btn', { visible: true, timeout: 5000 });
+                    await page.click('.login-btn');
+                } catch (ex) {
+                    console.log('[AuthService] Fallback login button also failed.');
+                }
             }
 
             // 2. Click logo/switch button to enable email login
             // Selector: <div data-v-e2756740="" class="logo"><img ...></div>
             console.log('[AuthService] Looking for login mode switch (logo)...');
             try {
-                // The user pointed to an image inside a div with class "logo"
-                const switchSelector = '.logo img';
+                // The user provided: <img data-v-e2756740="" class="img" ...>
+                const switchSelector = 'img[data-v-e2756740]';
                 await page.waitForSelector(switchSelector, { visible: true, timeout: 10000 });
-                await page.click(switchSelector);
+                console.log('[AuthService] Found switch image, clicking...');
+
+                // Try standard click first
+                await page.click(switchSelector).catch(async () => {
+                    console.log('[AuthService] Standard click failed for switch img, trying evaluate click...');
+                    await page.$eval(switchSelector, el => el.click());
+                });
             } catch (e) {
                 console.log('[AuthService] Logo switch button not found (might already be in correct mode or selector mismatch): ' + e.message);
+                try {
+                    // Fallback to div>img just in case
+                    await page.waitForSelector('.logo img', { visible: true, timeout: 3000 });
+                    await page.click('.logo img');
+                } catch (ex) { }
             }
 
             // 3. Enter credentials
