@@ -55,7 +55,11 @@ class AuthService {
 
             // 5. Wait for successful login
             console.log('[AuthService] Navigating to login page...');
-            await page.goto('https://www.terabox.com/ai/index', { waitUntil: 'networkidle2', timeout: 60000 });
+            try {
+                await page.goto('https://www.terabox.com/ai/index', { waitUntil: 'domcontentloaded', timeout: 90000 });
+            } catch (e) {
+                console.log('[AuthService] Navigation error (proceeding anyway): ' + e.message);
+            }
 
             // 1. Click the main Login button
             console.log('[AuthService] Waiting for login button...');
