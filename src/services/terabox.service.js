@@ -4,6 +4,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const config = require('../config/terabox.config');
 const FormData = require('form-data');
+const authService = require('./auth.service');
 
 class TeraboxService {
     constructor() {
@@ -62,7 +63,7 @@ class TeraboxService {
         }
     }
 
-    async uploadFile(filePath, directory = '/uploads') {
+    async uploadFile(filePath, directory = '/uploads', retryCount = 0) {
         try {
             const fileName = path.basename(filePath);
             const stats = fs.statSync(filePath);
@@ -92,16 +93,18 @@ class TeraboxService {
             });
 
             if (precreateRes.data.errno !== 0) {
+                // Check for auth error (errno -6)
+                if ((precreateRes.data.errno === -6 || precreateRes.data.errmsg?.includes('not login')) && retryCount < 1) {
+                    console.log('Auth error detected. Attempting to refresh tokens...');
+                    await authService.refreshTokens();
+                    console.log('Tokens refreshed. Retrying upload...');
+                    return this.uploadFile(filePath, directory, retryCount + 1);
+                }
                 throw new Error(`Precreate failed (errno ${precreateRes.data.errno}): ${precreateRes.data.errmsg || 'Unknown error'}`);
             }
 
             const uploadId = precreateRes.data.uploadid;
             console.log(`Precreate success. UploadID: ${uploadId}`);
-
-            // Step 2: Upload bits (using the same logic as the tool but with our headers)
-            // Note: Upload host might be different (c-jp or similar), but we'll try to follow the tool's lead for the upload step if dm.terabox.com doesn't work for bits.
-            // Actually, the user says "all calls MUST go to dm.terabox.com". Let's try that first for create/precreate.
-            // For the actual file data, we use the superfile2 API.
 
             // Step 2: Upload bits
             // Browser uses szb-cdata.terabox.com for this session
@@ -133,11 +136,16 @@ class TeraboxService {
                 },
                 maxContentLength: Infinity,
                 maxBodyLength: Infinity,
-                // Ensure cookies are parsed and sent correctly if the host is different
                 withCredentials: true
             });
 
             if (uploadRes.data.errno && uploadRes.data.errno !== 0) {
+                // Verify if auth error can happen here too
+                if ((uploadRes.data.errno === -6) && retryCount < 1) {
+                    console.log('Auth error during upload bits. Refreshing tokens...');
+                    await authService.refreshTokens();
+                    return this.uploadFile(filePath, directory, retryCount + 1);
+                }
                 throw new Error(`Upload failed (errno ${uploadRes.data.errno}): ${uploadRes.data.errmsg || 'Unknown error'}`);
             }
 
@@ -167,6 +175,11 @@ class TeraboxService {
             });
 
             if (createRes.data.errno !== 0) {
+                if ((createRes.data.errno === -6) && retryCount < 1) {
+                    console.log('Auth error during create. Refreshing tokens...');
+                    await authService.refreshTokens();
+                    return this.uploadFile(filePath, directory, retryCount + 1);
+                }
                 throw new Error(`Create failed (errno ${createRes.data.errno}): ${createRes.data.errmsg || 'Unknown error'}`);
             }
 
@@ -177,7 +190,16 @@ class TeraboxService {
             };
 
         } catch (error) {
-            console.error('Manual upload failed:', error.response?.data || error.message);
+            console.error('Upload failed:', error.response?.data || error.message);
+
+            // Catch-all for retry if it was a network 401/403 (though axios usually throws for strict status codes only if configured)
+            // But checking error message might helps
+            if ((error.message.includes('not login') || error.response?.status === 401) && retryCount < 1) {
+                console.log('Caught auth error in catch block. Refreshing...');
+                await authService.refreshTokens();
+                return this.uploadFile(filePath, directory, retryCount + 1);
+            }
+
             return {
                 success: false,
                 message: error.message
@@ -188,9 +210,6 @@ class TeraboxService {
     _generateDpLogId() {
         return crypto.randomBytes(10).toString('hex').toLowerCase();
     }
-
-    // Add other methods (fetchFileList, deleteFiles, etc.) mirroring the same header/cookie pattern if needed.
-    // For now, focusing on fixing the upload as requested.
 
     async fetchFileList(directory = '/') {
         try {

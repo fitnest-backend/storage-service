@@ -3,7 +3,7 @@ const getEnv = (key, defaultValue) => {
     return (value && value.trim() !== "") ? value : defaultValue;
 };
 
-module.exports = {
+const config = {
     credentials: {
         ndus: getEnv('TERABOX_NDUS', 'Yb8V8X8peHuiKM4l9FZ6V46-EQBvieH3E19BpOEs'),
         appId: getEnv('TERABOX_APP_ID', '250528'),
@@ -15,5 +15,11 @@ module.exports = {
         ndutFmv: getEnv('TERABOX_NDUT_FMV', '5648d962e91ce5c3289dfd5d017b6f64b9d20205ef1ae1cb78229c853dc295b203f7f31bfac9b60aa058dafc58c45d174666dea152a7358be5062ffc872229ecbcce9986b7c7e7291170fb5363aa718c0fb6f3975cd4ba5d58db24371459df9ac0a40a18f37bbeaf55fc4ef1cebe80dc'),
         csrfToken: getEnv('TERABOX_CSRF_TOKEN', 'qbl39NNPyuYqSuB0_HNUTz1P')
     },
-    uploadDir: getEnv('UPLOAD_DIR', '/uploads')
+    uploadDir: getEnv('UPLOAD_DIR', '/uploads'),
+    updateCredentials: function (newCreds) {
+        this.credentials = { ...this.credentials, ...newCreds };
+        console.log('Credentials updated:', Object.keys(newCreds).join(', '));
+    }
 };
+
+module.exports = config;
