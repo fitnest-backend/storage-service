@@ -1,7 +1,5 @@
 const teraboxService = require('../services/terabox.service');
 const fs = require('fs').promises;
-const path = require('path');
-const crypto = require('crypto');
 
 async function uploadFile(req, res) {
     try {
@@ -13,10 +11,18 @@ async function uploadFile(req, res) {
 
         console.log(`Received file: ${file.originalname}, stored at: ${file.path}, size: ${file.size}`);
 
-        const directory = req.query.directory || req.body.directory || '/uploads';
-        console.log(`Uploading to TeraBox directory: ${directory}`);
+        const directory = req.query.directory || req.body.directory;
+        let finalDirectory = '/uploads'; // default
+        if (req.body.type === 'profile') {
+            finalDirectory = '/profiles';
+        } else if (req.body.type === 'goal') {
+            finalDirectory = '/goals';
+        } else if (directory) {
+            finalDirectory = directory;
+        }
+        console.log(`Uploading to TeraBox directory: ${finalDirectory}`);
 
-        const result = await teraboxService.uploadFile(file.path, directory);
+        const result = await teraboxService.uploadFile(file.path, finalDirectory);
         console.log('TeraBox service result:', JSON.stringify(result));
 
         // Clean up temp file
@@ -27,6 +33,14 @@ async function uploadFile(req, res) {
         }
 
         if (result.success) {
+            // Clean up extra root directories after successful upload
+            try {
+                const cleanupResult = await teraboxService.cleanupRoot();
+                console.log('Cleanup result:', cleanupResult);
+            } catch (cleanupErr) {
+                console.error('Failed to clean up root directories:', cleanupErr);
+            }
+
             res.json({
                 success: true,
                 message: 'File uploaded successfully',
