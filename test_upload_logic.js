@@ -1,23 +1,23 @@
-const TeraboxService = require('./src/services/terabox.service');
-const config = require('./src/config/terabox.config');
+const { buildPrecreateUrl, buildUploadUrl } = require('./src/services/terabox-utils');
 
 async function testParams() {
-    console.log('Testing TeraboxService parameter generation...');
+    console.log('Testing Terabox Utils URL generation...');
 
-    // Test _generateLogId
-    const logId = TeraboxService._generateLogId();
-    console.log('Generated logId:', logId);
-    console.log('Decoded logId:', Buffer.from(logId, 'base64').toString());
+    const appId = '250528';
+    const jsToken = 'TEST_TOKEN';
+    const dpLogId = 'TEST_LOG_ID';
+    const fileName = 'test.jpg';
+    const uploadId = 'TEST_UPLOAD_ID';
 
-    // Test getCommonHeaders
-    const headers = TeraboxService.getCommonHeaders();
-    console.log('Headers:', JSON.stringify(headers, null, 2));
+    // Test buildPrecreateUrl
+    const preUrl = buildPrecreateUrl(appId, jsToken, dpLogId);
+    console.log('Precreate URL:', preUrl);
 
-    // Test getCommonParams
-    const params = TeraboxService.getCommonParams({ test: '1' });
-    console.log('Params:', JSON.stringify(params, null, 2));
+    // Test buildUploadUrl
+    const upUrl = buildUploadUrl(fileName, uploadId, appId);
+    console.log('Upload URL:', upUrl);
 
-    console.log('\nVerification complete. Please check if the logId format matches the browser example.');
+    console.log('\nVerification complete. Ensure these match the upload-tool format.');
 }
 
 testParams().catch(console.error);
