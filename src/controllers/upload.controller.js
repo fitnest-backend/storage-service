@@ -128,10 +128,24 @@ async function moveFile(req, res) {
     }
 }
 
+async function cleanupRoot(req, res) {
+    try {
+        const result = await teraboxService.cleanupRoot();
+        res.json(result);
+    } catch (error) {
+        console.error('Cleanup error:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Cleanup failed'
+        });
+    }
+}
+
 module.exports = {
     uploadFile,
     getFileList,
     downloadFile,
     deleteFiles,
-    moveFile
+    moveFile,
+    cleanupRoot
 };

@@ -2,8 +2,8 @@ function buildPrecreateUrl(appId, jsToken, dpLogId) {
     return `https://dm.terabox.com/api/precreate?app_id=${appId}&web=1&channel=dubox&clienttype=0&jsToken=${jsToken}&dp-logid=${dpLogId}`;
 }
 
-function buildUploadUrl(fileName, uploadId, appId) {
-    return `https://szb-cdata.terabox.com/rest/2.0/pcs/superfile2?method=upload&app_id=${appId}&channel=dubox&clienttype=0&web=1&path=%2F${encodeURIComponent(fileName)}&uploadid=${uploadId}&uploadsign=0&partseq=0`;
+function buildUploadUrl(pathStr, uploadId, appId) {
+    return `https://szb-cdata.terabox.com/rest/2.0/pcs/superfile2?method=upload&app_id=${appId}&channel=dubox&clienttype=0&web=1&path=${encodeURIComponent(pathStr)}&uploadid=${uploadId}&uploadsign=0&partseq=0`;
 }
 
 function buildCreateUrl(appId, jsToken, dpLogId) {

@@ -42,6 +42,11 @@ class TeraboxService {
 
     async uploadFile(filePath, directory = '/', retryCount = 0) {
         try {
+            // Sanitize directory: ensure it starts with / and no trailing / (unless root)
+            let cleanDir = directory.trim();
+            if (!cleanDir.startsWith('/')) cleanDir = '/' + cleanDir;
+            if (cleanDir.length > 1 && cleanDir.endsWith('/')) cleanDir = cleanDir.slice(0, -1);
+
             const fileName = path.basename(filePath);
             const stats = fs.statSync(filePath);
             const fileSize = stats.size;
@@ -51,8 +56,8 @@ class TeraboxService {
             const cookies = this._getCookies(creds);
 
             // Ensure directory exists
-            if (directory && directory !== '/') {
-                await this.createDirectory(directory);
+            if (cleanDir && cleanDir !== '/') {
+                await this.createDirectory(cleanDir);
             }
 
             // 1. Precreate
@@ -60,9 +65,9 @@ class TeraboxService {
             console.log(`[TeraboxService] Precreating ${fileName} at ${precreateUrl}`);
 
             const precreateParams = new URLSearchParams({
-                path: `${directory}/${fileName}`,
+                path: `${cleanDir}/${fileName}`,
                 autoinit: '1',
-                target_path: directory,
+                target_path: cleanDir,
                 block_list: JSON.stringify([fileMd5]),
                 size: fileSize,
                 local_mtime: Math.floor(stats.mtimeMs / 1000),
@@ -94,7 +99,10 @@ class TeraboxService {
             const uploadId = precreateResponse.data.uploadid;
 
             // 2. Upload
-            const uploadUrl = buildUploadUrl(fileName, uploadId, creds.appId);
+            // Use the target filename and directory for the upload URL
+            // Ensure proper path construction (handle root directory case)
+            const uploadPath = (cleanDir === '/') ? `/${fileName}` : `${cleanDir}/${fileName}`;
+            const uploadUrl = buildUploadUrl(uploadPath, uploadId, creds.appId);
             console.log(`[TeraboxService] Uploading to ${uploadUrl}`);
 
             const formData = new FormData();
@@ -114,10 +122,10 @@ class TeraboxService {
             console.log(`[TeraboxService] Creating file at ${createUrl}`);
 
             const createParams = new URLSearchParams({
-                path: `${directory}/${fileName}`,
+                path: `${cleanDir}/${fileName}`,
                 size: fileSize,
                 uploadid: uploadId,
-                target_path: directory,
+                target_path: cleanDir,
                 block_list: JSON.stringify([fileMd5]),
                 local_mtime: Math.floor(stats.mtimeMs / 1000),
                 isdir: '0',
@@ -198,7 +206,7 @@ class TeraboxService {
         try {
             const creds = this._getCredentials();
             const cookies = this._getCookies(creds);
-            const url = "https://www.1024terabox.com/api/filemanager";
+            const url = "https://dm.terabox.com/api/filemanager";
 
             const params = {
                 opera: "delete",
@@ -225,7 +233,7 @@ class TeraboxService {
         try {
             const creds = this._getCredentials();
             const cookies = this._getCookies(creds);
-            const url = "https://www.1024terabox.com/api/filemanager";
+            const url = "https://dm.terabox.com/api/filemanager";
 
             // Logic from fileMove.js
             const fileList = [{ path: sourcePath, dest: destinationPath, newname: newName }];
@@ -247,6 +255,39 @@ class TeraboxService {
             return response.data;
         } catch (error) {
             throw error;
+        }
+    }
+
+    async cleanupRoot() {
+        try {
+            const listResult = await this.fetchFileList('/');
+            if (!listResult.success || !listResult.data || !listResult.data.list) {
+                return { success: false, message: 'Failed to list root directory.' };
+            }
+
+            const files = listResult.data.list;
+            const allowedPaths = ['/goals', '/profiles', '/uploads']; // Keep uploads too as it is the default
+            const toDelete = files
+                .filter(file => !allowedPaths.includes(file.path))
+                .map(file => file.path);
+
+            if (toDelete.length === 0) {
+                return { success: true, message: 'Root directory is already clean.', deleted: [] };
+            }
+
+            console.log('[TeraboxService] Cleaning up root directory. Deleting:', toDelete);
+            const deleteResult = await this.deleteFiles(toDelete);
+
+            return {
+                success: deleteResult.success,
+                message: deleteResult.message,
+                deleted: toDelete,
+                details: deleteResult.result
+            };
+
+        } catch (error) {
+            console.error('[TeraboxService] Cleanup failed:', error);
+            return { success: false, message: error.message };
         }
     }
 }

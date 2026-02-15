@@ -30,5 +30,6 @@ router.get('/files', uploadController.getFileList);
 router.get('/download/:fileId', uploadController.downloadFile);
 router.delete('/files', uploadController.deleteFiles);
 router.put('/move', uploadController.moveFile);
+router.delete('/cleanup', uploadController.cleanupRoot);
 
 module.exports = router;
