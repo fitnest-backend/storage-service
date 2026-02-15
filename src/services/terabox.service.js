@@ -95,8 +95,10 @@ class TeraboxService {
             const uploadId = precreateResponse.data.uploadid;
 
             // 2. Upload
-            // Use the target filename for the upload URL as well to keep things consistent
-            const uploadUrl = buildUploadUrl(fileName, uploadId, creds.appId);
+            // Use the target filename and directory for the upload URL
+            // Ensure proper path construction (handle root directory case)
+            const uploadPath = (directory === '/') ? `/${fileName}` : `${directory}/${fileName}`;
+            const uploadUrl = buildUploadUrl(uploadPath, uploadId, creds.appId);
             console.log(`[TeraboxService] Uploading to ${uploadUrl}`);
 
             const formData = new FormData();
