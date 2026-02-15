@@ -290,6 +290,38 @@ class TeraboxService {
             return { success: false, message: error.message };
         }
     }
+
+    async downloadFile(fileId) {
+        try {
+            const creds = this._getCredentials();
+            const cookies = this._getCookies(creds);
+            const url = "https://dm.terabox.com/api/filemanager";
+
+            const params = {
+                opera: "download",
+                app_id: creds.appId,
+                jsToken: creds.jsToken,
+                "dp-logid": creds.dpLogId,
+            };
+
+            const data = new URLSearchParams();
+            data.append("filelist", JSON.stringify([{ fs_id: fileId }]));
+
+            const response = await axios.post(url, data.toString(), {
+                headers: { Cookie: cookies },
+                params,
+            });
+
+            if (response.data && response.data.dlink && response.data.dlink.length > 0) {
+                return response.data.dlink[0].dlink; // The download URL
+            } else {
+                throw new Error('No download link found');
+            }
+        } catch (error) {
+            console.error('[TeraboxService] Download failed:', error);
+            throw error;
+        }
+    }
 }
 
 module.exports = new TeraboxService();

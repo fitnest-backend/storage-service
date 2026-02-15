@@ -74,6 +74,20 @@ async function getFileList(req, res) {
     try {
         const directory = req.query.directory || '/';
         const result = await teraboxService.fetchFileList(directory);
+        if (result.success && result.data && result.data.list) {
+            // Add download URLs for files
+            const files = result.data.list.filter(item => item.isdir === 0); // files only
+            const urlPromises = files.map(async (file) => {
+                try {
+                    const downloadResult = await teraboxService.downloadFile(file.fs_id);
+                    file.download_url = downloadResult; // assuming downloadFile returns the URL
+                } catch (err) {
+                    console.error(`Failed to get download URL for ${file.fs_id}:`, err);
+                    file.download_url = null;
+                }
+            });
+            await Promise.all(urlPromises);
+        }
         res.json(result);
     } catch (error) {
         console.error('Fetch file list error:', error);
