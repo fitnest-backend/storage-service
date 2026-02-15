@@ -16,11 +16,7 @@ async function uploadFile(req, res) {
         const directory = req.query.directory || req.body.directory || '/uploads';
         console.log(`Uploading to TeraBox directory: ${directory}`);
 
-        // Generate a clean target filename (UUID) to avoid random numbers from temp file
-        const targetFileName = crypto.randomUUID() + path.extname(file.originalname);
-        console.log(`Target filename: ${targetFileName}`);
-
-        const result = await teraboxService.uploadFile(file.path, directory, 0, targetFileName);
+        const result = await teraboxService.uploadFile(file.path, directory);
         console.log('TeraBox service result:', JSON.stringify(result));
 
         // Clean up temp file

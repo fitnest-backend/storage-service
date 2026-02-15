@@ -40,15 +40,9 @@ class TeraboxService {
         return `lang=en; ndus=${creds.ndus};`;
     }
 
-    async uploadFile(filePath, directory = '/', retryCount = 0, targetFileName = null) {
+    async uploadFile(filePath, directory = '/', retryCount = 0) {
         try {
-            // Sanitize directory: ensure it starts with / and no trailing / (unless root)
-            let cleanDir = directory.trim();
-            if (!cleanDir.startsWith('/')) cleanDir = '/' + cleanDir;
-            if (cleanDir.length > 1 && cleanDir.endsWith('/')) cleanDir = cleanDir.slice(0, -1);
-
-            const tempFileName = path.basename(filePath);
-            const fileName = targetFileName || tempFileName;
+            const fileName = path.basename(filePath);
             const stats = fs.statSync(filePath);
             const fileSize = stats.size;
             const fileMd5 = crypto.createHash('md5').update(fs.readFileSync(filePath)).digest('hex');
@@ -57,8 +51,8 @@ class TeraboxService {
             const cookies = this._getCookies(creds);
 
             // Ensure directory exists
-            if (cleanDir && cleanDir !== '/') {
-                await this.createDirectory(cleanDir);
+            if (directory && directory !== '/') {
+                await this.createDirectory(directory);
             }
 
             // 1. Precreate
@@ -66,9 +60,9 @@ class TeraboxService {
             console.log(`[TeraboxService] Precreating ${fileName} at ${precreateUrl}`);
 
             const precreateParams = new URLSearchParams({
-                path: `${cleanDir}/${fileName}`,
+                path: `${directory}/${fileName}`,
                 autoinit: '1',
-                target_path: cleanDir,
+                target_path: directory,
                 block_list: JSON.stringify([fileMd5]),
                 size: fileSize,
                 local_mtime: Math.floor(stats.mtimeMs / 1000),
@@ -92,7 +86,7 @@ class TeraboxService {
                 if ((precreateResponse.data.errno === -6 || precreateResponse.data.errmsg?.includes('not login')) && retryCount < 1) {
                     console.log('[TeraboxService] Auth error in precreate. Refreshing tokens (DISABLED for verification)...');
                     // await authService.refreshTokens();
-                    // return this.uploadFile(filePath, directory, retryCount + 1, targetFileName);
+                    // return this.uploadFile(filePath, directory, retryCount + 1);
                 }
                 throw new Error(`Precreate failed (errno ${precreateResponse.data.errno}): ${precreateResponse.data.errmsg || 'Unknown error'}`);
             }
@@ -100,14 +94,11 @@ class TeraboxService {
             const uploadId = precreateResponse.data.uploadid;
 
             // 2. Upload
-            // Use the target filename and directory for the upload URL
-            // Ensure proper path construction (handle root directory case)
-            const uploadPath = (cleanDir === '/') ? `/${fileName}` : `${cleanDir}/${fileName}`;
-            const uploadUrl = buildUploadUrl(uploadPath, uploadId, creds.appId);
+            const uploadUrl = buildUploadUrl(fileName, uploadId, creds.appId);
             console.log(`[TeraboxService] Uploading to ${uploadUrl}`);
 
             const formData = new FormData();
-            formData.append('file', fs.createReadStream(filePath), { filename: fileName }); // Send with target filename
+            formData.append('file', fs.createReadStream(filePath));
 
             await axios.post(uploadUrl, formData, {
                 headers: {
@@ -123,10 +114,10 @@ class TeraboxService {
             console.log(`[TeraboxService] Creating file at ${createUrl}`);
 
             const createParams = new URLSearchParams({
-                path: `${cleanDir}/${fileName}`,
+                path: `${directory}/${fileName}`,
                 size: fileSize,
                 uploadid: uploadId,
-                target_path: cleanDir,
+                target_path: directory,
                 block_list: JSON.stringify([fileMd5]),
                 local_mtime: Math.floor(stats.mtimeMs / 1000),
                 isdir: '0',
@@ -145,7 +136,7 @@ class TeraboxService {
                 if ((createResponse.data.errno === -6) && retryCount < 1) {
                     console.log('[TeraboxService] Auth error in create. Refreshing tokens (DISABLED for verification)...');
                     // await authService.refreshTokens();
-                    // return this.uploadFile(filePath, directory, retryCount + 1, targetFileName);
+                    // return this.uploadFile(filePath, directory, retryCount + 1);
                 }
                 throw new Error(`Create failed (errno ${createResponse.data.errno}): ${createResponse.data.errmsg || 'Unknown error'}`);
             }
@@ -158,7 +149,7 @@ class TeraboxService {
             if ((error.response?.data?.errno === -6 || error.message.includes('not login')) && retryCount < 1) {
                 console.log('[TeraboxService] Catch block auth retry (DISABLED for verification)...');
                 // await authService.refreshTokens();
-                // return this.uploadFile(filePath, directory, retryCount + 1, targetFileName);
+                // return this.uploadFile(filePath, directory, retryCount + 1);
             }
             return { success: false, message: error.response?.data || error.message };
         }
