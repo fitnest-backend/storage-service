@@ -50,6 +50,11 @@ class TeraboxService {
             const creds = this._getCredentials();
             const cookies = this._getCookies(creds);
 
+            // Ensure directory exists
+            if (directory && directory !== '/') {
+                await this.createDirectory(directory);
+            }
+
             // 1. Precreate
             const precreateUrl = buildPrecreateUrl(creds.appId, creds.jsToken, creds.dpLogId);
             console.log(`[TeraboxService] Precreating ${fileName} at ${precreateUrl}`);
