@@ -40,9 +40,10 @@ class TeraboxService {
         return `lang=en; ndus=${creds.ndus};`;
     }
 
-    async uploadFile(filePath, directory = '/', retryCount = 0) {
+    async uploadFile(filePath, directory = '/', retryCount = 0, targetFileName = null) {
         try {
-            const fileName = path.basename(filePath);
+            const tempFileName = path.basename(filePath);
+            const fileName = targetFileName || tempFileName;
             const stats = fs.statSync(filePath);
             const fileSize = stats.size;
             const fileMd5 = crypto.createHash('md5').update(fs.readFileSync(filePath)).digest('hex');
@@ -86,7 +87,7 @@ class TeraboxService {
                 if ((precreateResponse.data.errno === -6 || precreateResponse.data.errmsg?.includes('not login')) && retryCount < 1) {
                     console.log('[TeraboxService] Auth error in precreate. Refreshing tokens (DISABLED for verification)...');
                     // await authService.refreshTokens();
-                    // return this.uploadFile(filePath, directory, retryCount + 1);
+                    // return this.uploadFile(filePath, directory, retryCount + 1, targetFileName);
                 }
                 throw new Error(`Precreate failed (errno ${precreateResponse.data.errno}): ${precreateResponse.data.errmsg || 'Unknown error'}`);
             }
@@ -94,11 +95,12 @@ class TeraboxService {
             const uploadId = precreateResponse.data.uploadid;
 
             // 2. Upload
+            // Use the target filename for the upload URL as well to keep things consistent
             const uploadUrl = buildUploadUrl(fileName, uploadId, creds.appId);
             console.log(`[TeraboxService] Uploading to ${uploadUrl}`);
 
             const formData = new FormData();
-            formData.append('file', fs.createReadStream(filePath));
+            formData.append('file', fs.createReadStream(filePath), { filename: fileName }); // Send with target filename
 
             await axios.post(uploadUrl, formData, {
                 headers: {
@@ -136,7 +138,7 @@ class TeraboxService {
                 if ((createResponse.data.errno === -6) && retryCount < 1) {
                     console.log('[TeraboxService] Auth error in create. Refreshing tokens (DISABLED for verification)...');
                     // await authService.refreshTokens();
-                    // return this.uploadFile(filePath, directory, retryCount + 1);
+                    // return this.uploadFile(filePath, directory, retryCount + 1, targetFileName);
                 }
                 throw new Error(`Create failed (errno ${createResponse.data.errno}): ${createResponse.data.errmsg || 'Unknown error'}`);
             }
@@ -149,7 +151,7 @@ class TeraboxService {
             if ((error.response?.data?.errno === -6 || error.message.includes('not login')) && retryCount < 1) {
                 console.log('[TeraboxService] Catch block auth retry (DISABLED for verification)...');
                 // await authService.refreshTokens();
-                // return this.uploadFile(filePath, directory, retryCount + 1);
+                // return this.uploadFile(filePath, directory, retryCount + 1, targetFileName);
             }
             return { success: false, message: error.response?.data || error.message };
         }

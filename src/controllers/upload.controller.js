@@ -1,6 +1,7 @@
 const teraboxService = require('../services/terabox.service');
 const fs = require('fs').promises;
 const path = require('path');
+const crypto = require('crypto');
 
 async function uploadFile(req, res) {
     try {
@@ -15,7 +16,11 @@ async function uploadFile(req, res) {
         const directory = req.query.directory || req.body.directory || '/uploads';
         console.log(`Uploading to TeraBox directory: ${directory}`);
 
-        const result = await teraboxService.uploadFile(file.path, directory);
+        // Generate a clean target filename (UUID) to avoid random numbers from temp file
+        const targetFileName = crypto.randomUUID() + path.extname(file.originalname);
+        console.log(`Target filename: ${targetFileName}`);
+
+        const result = await teraboxService.uploadFile(file.path, directory, 0, targetFileName);
         console.log('TeraBox service result:', JSON.stringify(result));
 
         // Clean up temp file
