@@ -1,0 +1,24 @@
+
+> terabox-worker-service@1.0.0 start
+> node server.js
+
+Loading routes...
+Routes loaded
+Starting server on port 9090...
+TeraBox HTTP worker listening on port 9090
+[TeraboxService] Download failed: Error: No download link found
+    at TeraboxService.downloadFile (/Users/aousganeh/Desktop/fix/code/terabox-worker-service/src/services/terabox.service.js:340:23)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async downloadFile (/Users/aousganeh/Desktop/fix/code/terabox-worker-service/src/controllers/upload.controller.js:108:24)
+Download error: Error: No download link found
+    at TeraboxService.downloadFile (/Users/aousganeh/Desktop/fix/code/terabox-worker-service/src/services/terabox.service.js:340:23)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async downloadFile (/Users/aousganeh/Desktop/fix/code/terabox-worker-service/src/controllers/upload.controller.js:108:24)
+[TeraboxService] Download failed: Error: No download link found
+    at TeraboxService.downloadFile (/Users/aousganeh/Desktop/fix/code/terabox-worker-service/src/services/terabox.service.js:340:23)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async downloadFile (/Users/aousganeh/Desktop/fix/code/terabox-worker-service/src/controllers/upload.controller.js:108:24)
+Download error: Error: No download link found
+    at TeraboxService.downloadFile (/Users/aousganeh/Desktop/fix/code/terabox-worker-service/src/services/terabox.service.js:340:23)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async downloadFile (/Users/aousganeh/Desktop/fix/code/terabox-worker-service/src/controllers/upload.controller.js:108:24)
