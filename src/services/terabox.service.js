@@ -293,6 +293,28 @@ class TeraboxService {
 
     async downloadFile(fileId) {
         try {
+            let actualFsId = fileId;
+
+            // If fileId looks like a path (starts with /), resolve it to fs_id
+            if (typeof fileId === 'string' && fileId.startsWith('/')) {
+                console.log(`[TeraboxService] Resolving path ${fileId} to fs_id...`);
+                const dir = path.dirname(fileId);
+                const filename = path.basename(fileId);
+
+                const listResult = await this.fetchFileList(dir);
+                if (listResult.success && listResult.data && listResult.data.list) {
+                    const fileObj = listResult.data.list.find(f => f.server_filename === filename);
+                    if (fileObj) {
+                        actualFsId = fileObj.fs_id;
+                        console.log(`[TeraboxService] Resolved ${fileId} to fs_id: ${actualFsId}`);
+                    } else {
+                        throw new Error(`File not found at path: ${fileId}`);
+                    }
+                } else {
+                    throw new Error(`Failed to list directory: ${dir}`);
+                }
+            }
+
             const creds = this._getCredentials();
             const cookies = this._getCookies(creds);
             const url = "https://dm.terabox.com/api/filemanager";
@@ -305,7 +327,7 @@ class TeraboxService {
             };
 
             const data = new URLSearchParams();
-            data.append("filelist", JSON.stringify([{ fs_id: fileId }]));
+            data.append("filelist", JSON.stringify([{ fs_id: actualFsId }]));
 
             const response = await axios.post(url, data.toString(), {
                 headers: { Cookie: cookies },

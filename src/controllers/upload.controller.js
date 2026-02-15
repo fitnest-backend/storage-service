@@ -100,9 +100,9 @@ async function getFileList(req, res) {
 
 async function downloadFile(req, res) {
     try {
-        const fileId = req.params.fileId;
+        const fileId = req.query.fileId || req.params.fileId;
         if (!fileId) {
-            return res.status(400).json({ success: false, message: 'fileId is required' });
+            return res.status(400).json({ success: false, message: 'fileId query parameter is required' });
         }
 
         const result = await teraboxService.downloadFile(fileId);
