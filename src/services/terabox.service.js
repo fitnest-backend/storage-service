@@ -37,7 +37,7 @@ class TeraboxService {
     }
 
     _getCookies(creds) {
-        return `lang=en; ndus=${creds.ndus}; browserid=${creds.browserId}; ndut_fmt=${creds.ndutFmt}; ndut_fmv=${creds.ndutFmv}; __bid_n=${creds.bidN};`;
+        return `lang=en; ndus=${creds.ndus};`;
     }
 
     async uploadFile(filePath, directory = '/', retryCount = 0) {
@@ -69,13 +69,12 @@ class TeraboxService {
                 {
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
-                        Cookie: cookies,
-                        'Referer': 'https://dm.terabox.com/main?category=all',
-                        'Origin': 'https://dm.terabox.com',
-                        'User-Agent': this.userAgent // Ensure UA is sent
+                        Cookie: cookies
                     }
                 }
             );
+
+
 
             if (precreateResponse.data.errno !== 0) {
                 // Check for auth error (errno -6) and retry
@@ -99,10 +98,7 @@ class TeraboxService {
             await axios.post(uploadUrl, formData, {
                 headers: {
                     ...formData.getHeaders(),
-                    Cookie: cookies,
-                    'Referer': 'https://dm.terabox.com/main?category=all',
-                    'Origin': 'https://dm.terabox.com',
-                    'User-Agent': this.userAgent
+                    Cookie: cookies
                 },
                 maxContentLength: Infinity,
                 maxBodyLength: Infinity
@@ -127,10 +123,7 @@ class TeraboxService {
             const createResponse = await axios.post(createUrl, createParams.toString(), {
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
-                    Cookie: cookies,
-                    'Referer': 'https://dm.terabox.com/main?category=all',
-                    'Origin': 'https://dm.terabox.com',
-                    'User-Agent': this.userAgent
+                    Cookie: cookies
                 },
             });
 
