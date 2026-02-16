@@ -20,4 +20,4 @@ COPY . .
 EXPOSE 9090
 
 # Start the worker
-CMD ["node", "server.js"]
+CMD ["node", "server.grpc.js"]
