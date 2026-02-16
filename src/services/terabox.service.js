@@ -408,15 +408,37 @@ class TeraboxService {
             }
 
             const creds = this._getCredentials();
-            const response = await this._getShortUrl(creds.ndus, actualPath, actualFsId, creds.appId, creds.jsToken, creds.dpLogId);
-            if (!response || response.errno !== 0 || !response.link) {
-                throw new Error(response?.show_msg || "Failed to create share link.");
+            const downloadResult = await this.getDownloadLink(creds.ndus, actualFsId, creds.appId, creds.jsToken, creds.dpLogId);
+            if (!downloadResult.success) {
+                throw new Error(downloadResult.message || "Failed to get download link.");
             }
 
-            return { dlink: response.link, fsId: actualFsId };
+            return { dlink: downloadResult.downloadLink, fsId: actualFsId };
         } catch (error) {
             console.error('[TeraboxService] Download failed:', error);
             throw error;
+        }
+    }
+
+    // Local getDownloadLink function to avoid import issues
+    async getDownloadLink(ndus, fid, appId, jsToken, dpLogId) {
+        try {
+            const homeInfo = await this._fetchHomeInfo(ndus);
+            if (!homeInfo || !homeInfo.data.sign3 || !homeInfo.data.sign1 || !homeInfo.data.timestamp) {
+                return { success: false, message: "Invalid home information received." };
+            }
+
+            const sign = this._generateSign(homeInfo.data.sign3, homeInfo.data.sign1);
+            if (!sign) return { success: false, message: "Failed to generate sign." };
+
+            const res = await this._generateDownload(sign, fid, homeInfo.data.timestamp, ndus, appId, jsToken, dpLogId);
+            if (!res || !res.downloadLink[0]?.dlink) {
+                return { success: false, message: res.message || "Failed to retrieve download link." };
+            }
+
+            return { success: true, message: "Download link retrieved successfully.", downloadLink: res.downloadLink[0].dlink };
+        } catch (error) {
+            return { success: false, message: error.message || "Unknown error occurred." };
         }
     }
 }

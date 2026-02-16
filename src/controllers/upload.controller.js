@@ -107,11 +107,10 @@ async function downloadFile(req, res) {
         }
 
         const result = await teraboxService.downloadFile(fileId);
-        const streamingUrl = `${req.protocol}://${req.get('host')}/api/v1/upload/media/terabox/${result.fsId}`;
         res.json({
             success: true,
             message: 'Download URL generated',
-            download_url: streamingUrl
+            download_url: result.dlink
         });
     } catch (error) {
         console.error('Download error:', error);
