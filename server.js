@@ -16,6 +16,9 @@ app.use(express.urlencoded({ extended: true }));
 // Internal auth middleware
 const internalAuthMiddleware = (req, res, next) => {
     const token = req.headers['x-internal-token'];
+    console.log('Auth middleware: Headers:', JSON.stringify(req.headers));
+    console.log(`Auth middleware: Token: ${token}`);
+
     if (token === 'shared-secret-token') {
         return next();
     }
