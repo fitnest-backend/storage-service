@@ -442,6 +442,67 @@ class TeraboxService {
             return { success: false, message: error.message || "Unknown error occurred." };
         }
     }
+
+    async getFileStream(fileId) {
+        try {
+            let actualFsId = fileId;
+            let filename = `file_${fileId}`;
+
+            // If fileId looks like a path (starts with /), resolve it to fs_id and path
+            if (typeof fileId === 'string' && fileId.startsWith('/')) {
+                console.log(`[TeraboxService] Resolving path ${fileId} to fs_id...`);
+                const dir = path.dirname(fileId);
+                const fname = path.basename(fileId);
+
+                const listResult = await this.fetchFileList(dir);
+                if (listResult.success && listResult.data && listResult.data.list) {
+                    const fileObj = listResult.data.list.find(f => f.server_filename === fname);
+                    if (fileObj) {
+                        actualFsId = fileObj.fs_id;
+                        filename = fileObj.server_filename;
+                        console.log(`[TeraboxService] Resolved ${fileId} to fs_id: ${actualFsId}`);
+                    } else {
+                        throw new Error(`File not found at path: ${fileId}`);
+                    }
+                } else {
+                    throw new Error(`Failed to list directory: ${dir}`);
+                }
+            }
+
+            const creds = this._getCredentials();
+            const downloadResult = await this.getDownloadLink(creds.ndus, actualFsId, creds.appId, creds.jsToken, creds.dpLogId);
+
+            if (!downloadResult.success) {
+                throw new Error(downloadResult.message || "Failed to get download link.");
+            }
+
+            const dlink = downloadResult.downloadLink;
+            const cookies = this._getCookies(creds);
+
+            console.log(`[TeraboxService] Fetching stream from dlink: ${dlink}`);
+            const response = await axios({
+                method: 'get',
+                url: dlink,
+                responseType: 'stream',
+                headers: {
+                    'Cookie': cookies,
+                    'User-Agent': this.userAgent,
+                    // Add other headers if necessary found in testing
+                }
+            });
+
+            return {
+                stream: response.data,
+                contentLength: response.headers['content-length'],
+                contentType: response.headers['content-type'],
+                filename: filename
+            };
+
+        } catch (error) {
+            console.error('[TeraboxService] Get stream failed:', error);
+            throw error;
+        }
+    }
 }
 
 module.exports = new TeraboxService();

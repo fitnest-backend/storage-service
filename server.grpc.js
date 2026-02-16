@@ -125,6 +125,45 @@ const getDownloadUrl = async (call, callback) => {
     }
 };
 
+const downloadFile = async (call) => {
+    const fileId = call.request.file_id;
+    console.log(`[gRPC] DownloadFile request for fileId: ${fileId}`);
+
+    try {
+        const { stream, contentLength, contentType, filename } = await teraboxService.getFileStream(fileId);
+
+        // Send metadata first
+        call.write({
+            metadata: {
+                filename: filename,
+                directory: '/', // Unknown or irrelevant for download
+                content_type: contentType || 'application/octet-stream'
+            }
+        });
+
+        stream.on('data', (chunk) => {
+            call.write({ file_data: chunk });
+        });
+
+        stream.on('end', () => {
+            call.end();
+            console.log(`[gRPC] DownloadFile finished for ${fileId}`);
+        });
+
+        stream.on('error', (err) => {
+            console.error(`[gRPC] Stream error for ${fileId}:`, err);
+            call.destroy(new Error('Stream error'));
+        });
+
+    } catch (error) {
+        console.error('[gRPC] DownloadFile error:', error);
+        call.emit('error', {
+            code: grpc.status.INTERNAL,
+            details: error.message || 'Download failed'
+        });
+    }
+};
+
 const deleteFiles = async (call, callback) => {
     const paths = call.request.paths;
     console.log(`[gRPC] DeleteFiles: ${JSON.stringify(paths)}`);
@@ -156,6 +195,7 @@ const main = () => {
     server.addService(teraboxProto.TeraBoxService.service, {
         UploadFile: uploadFile,
         GetDownloadUrl: getDownloadUrl,
+        DownloadFile: downloadFile,
         DeleteFiles: deleteFiles
     });
 
