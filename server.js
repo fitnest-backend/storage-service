@@ -13,6 +13,18 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Internal auth middleware
+const internalAuthMiddleware = (req, res, next) => {
+    const token = req.headers['x-internal-token'];
+    if (token === 'shared-secret-token') {
+        return next();
+    }
+    return res.status(403).json({ error: 'Forbidden: Invalid internal token' });
+};
+
+// Apply to upload routes
+app.use('/api/v1/upload', internalAuthMiddleware);
+
 app.use('/api/v1/upload', uploadRoutes);
 app.use('/api/v1/auth', authRoutes);
 
@@ -24,4 +36,3 @@ console.log(`Starting server on port ${PORT}...`);
 app.listen(PORT, () => {
     console.log(`TeraBox HTTP worker listening on port ${PORT}`);
 });
-
