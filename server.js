@@ -4,6 +4,7 @@ const cors = require('cors');
 console.log('Loading routes...');
 const uploadRoutes = require('./src/routes/upload.routes');
 const authRoutes = require('./src/routes/auth.routes');
+const { streamTeraboxFile } = require('./src/controllers/upload.controller');
 console.log('Routes loaded');
 
 const app = express();
@@ -26,9 +27,9 @@ const internalAuthMiddleware = (req, res, next) => {
 };
 
 // Apply to upload routes
-app.use('/api/v1/upload', internalAuthMiddleware);
+app.use('/api/v1/files', internalAuthMiddleware);
 
-app.use('/api/v1/upload', uploadRoutes);
+app.use('/api/v1/files', uploadRoutes);
 app.use('/api/v1/auth', authRoutes);
 
 app.get('/health', (req, res) => {

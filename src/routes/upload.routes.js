@@ -26,11 +26,10 @@ const upload = multer({
 });
 
 router.post('/upload', upload.single('file'), uploadController.uploadFile);
-router.get('/files', uploadController.getFileList);
+router.get('/', uploadController.getFileList);
 router.get('/download', uploadController.downloadFile);
-router.delete('/files', uploadController.deleteFiles);
+router.delete('/', uploadController.deleteFiles);
 router.put('/move', uploadController.moveFile);
 router.delete('/cleanup', uploadController.cleanupRoot);
-router.get('/media/terabox/:fsId', uploadController.streamTeraboxFile);
 
 module.exports = router;
