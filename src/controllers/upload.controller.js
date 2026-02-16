@@ -1,5 +1,6 @@
 const teraboxService = require('../services/terabox.service');
 const fs = require('fs').promises;
+const axios = require('axios');
 
 async function uploadFile(req, res) {
     try {
@@ -106,10 +107,11 @@ async function downloadFile(req, res) {
         }
 
         const result = await teraboxService.downloadFile(fileId);
+        const streamingUrl = `${req.protocol}://${req.get('host')}/api/v1/upload/media/terabox/${result.fsId}`;
         res.json({
             success: true,
             message: 'Download URL generated',
-            download_url: result
+            download_url: streamingUrl
         });
     } catch (error) {
         console.error('Download error:', error);
@@ -169,11 +171,47 @@ async function cleanupRoot(req, res) {
     }
 }
 
+async function streamTeraboxFile(req, res) {
+    try {
+        const fsId = req.params.fsId;
+        const result = await teraboxService.downloadFile(fsId);
+        const dlink = result.dlink;
+
+        // IMPORTANT: many dlinks require auth cookies and a browser-like UA.
+        const upstream = await axios.get(dlink, {
+            responseType: "stream",
+            // follow redirects to the real CDN url
+            maxRedirects: 5,
+            headers: {
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15",
+                // If TeraBox requires cookies for dlink GET, reuse your cookie builder
+                Cookie: `lang=en; ndus=${require('../config/terabox.config').credentials.ndus};`,
+            },
+            validateStatus: () => true,
+        });
+
+        if (upstream.status >= 400) {
+            res.status(502).json({ success: false, message: "Upstream fetch failed", status: upstream.status });
+            upstream.data?.destroy?.();
+            return;
+        }
+
+        // pass through content type + caching hints
+        if (upstream.headers["content-type"]) res.setHeader("Content-Type", upstream.headers["content-type"]);
+        res.setHeader("Cache-Control", "public, max-age=3600"); // tune this
+
+        upstream.data.pipe(res);
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message || "stream failed" });
+    }
+}
+
 module.exports = {
     uploadFile,
     getFileList,
     downloadFile,
     deleteFiles,
     moveFile,
-    cleanupRoot
+    cleanupRoot,
+    streamTeraboxFile
 };
