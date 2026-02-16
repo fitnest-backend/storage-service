@@ -15,6 +15,8 @@ RUN npm install
 
 # Copy source and proto
 COPY . .
+# Explicitly copy server.grpc.js to be sure
+COPY server.grpc.js .
 
 # Expose gRPC port
 EXPOSE 9090
