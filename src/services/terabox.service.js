@@ -47,23 +47,34 @@ class TeraboxService {
 
     async _fetchHomeInfo(ndus) {
         try {
-            const res = await axios.get("https://www.1024terabox.com/api/home/info", {
+            console.log(`[TeraboxService] Fetching home info for NDUS from dm.terabox.com...`);
+            const res = await axios.get("https://dm.terabox.com/api/home/info", {
                 params: { app_id: "250528", web: "1", channel: "dubox", clienttype: "0" },
-                headers: { "Cookie": `ndus=${ndus}` }
+                headers: {
+                    "Cookie": `ndus=${ndus}`,
+                    "User-Agent": this.userAgent
+                }
             });
-            return { success: true, data: res.data.data };
+            console.log(`[TeraboxService] Home info response: errno=${res.data.errno}, has_data=${!!res.data.data}`);
+            if (res.data.errno === 0) {
+                return { success: true, data: res.data.data };
+            }
+            return { success: false, message: res.data.errmsg || "Failed to fetch home info." };
         } catch (e) { return { success: false, message: e.message }; }
     }
 
     async _generateDownload(sign, fid, timestamp, ndus, appId, jsToken, dpLogId) {
         try {
-            const res = await axios.get("https://www.1024terabox.com/api/download", {
+            const res = await axios.get("https://dm.terabox.com/api/download", {
                 params: {
                     app_id: appId || "250528", web: "1", channel: "dubox", clienttype: "0",
                     jsToken, "dp-logid": dpLogId, fidlist: `[${fid}]`, type: "dlink",
                     vip: "2", sign, timestamp, need_speed: "0"
                 },
-                headers: { "Cookie": `ndus=${ndus}` }
+                headers: {
+                    "Cookie": `ndus=${ndus}`,
+                    "User-Agent": this.userAgent
+                }
             });
             if (!res.data.dlink) return { success: false, message: res.data.errmsg };
             return { success: true, downloadLink: res.data.dlink };
@@ -117,12 +128,19 @@ class TeraboxService {
             bidN: config.credentials.bidN,
             ndutFmt: config.credentials.ndutFmt,
             ndutFmv: config.credentials.ndutFmv,
+            csrfToken: config.credentials.csrfToken,
             dpLogId: this._generateDpLogId()
         };
     }
 
     _getCookies(creds) {
-        return `lang=en; ndus=${creds.ndus};`;
+        let cookies = `lang=en; ndus=${creds.ndus};`;
+        if (creds.browserId) cookies += ` browserid=${creds.browserId};`;
+        if (creds.bidN) cookies += ` __bid_n=${creds.bidN};`;
+        if (creds.ndutFmt) cookies += ` ndut_fmt=${creds.ndutFmt};`;
+        if (creds.ndutFmv) cookies += ` ndut_fmv=${creds.ndutFmv};`;
+        if (creds.csrfToken) cookies += ` csrfToken=${creds.csrfToken};`;
+        return cookies;
     }
 
     async uploadFile(filePath, directory = '/', retryCount = 0) {
@@ -447,47 +465,66 @@ class TeraboxService {
         try {
             let actualFsId = fileId;
             let filename = `file_${fileId}`;
+            let filePath = null;
 
-            // If fileId looks like a path (starts with /), resolve it to fs_id and path
-            if (typeof fileId === 'string' && fileId.startsWith('/')) {
-                console.log(`[TeraboxService] Resolving path ${fileId} to fs_id...`);
-                const dir = path.dirname(fileId);
-                const fname = path.basename(fileId);
-
-                const listResult = await this.fetchFileList(dir);
-                if (listResult.success && listResult.data && listResult.data.list) {
-                    const fileObj = listResult.data.list.find(f => f.server_filename === fname);
-                    if (fileObj) {
-                        actualFsId = fileObj.fs_id;
-                        filename = fileObj.server_filename;
-                        console.log(`[TeraboxService] Resolved ${fileId} to fs_id: ${actualFsId}`);
-                    } else {
-                        throw new Error(`File not found at path: ${fileId}`);
+            // Resolve fileId to path and fs_id
+            if (typeof fileId === 'string') {
+                console.log(`[TeraboxService] Resolving ${fileId} to path...`);
+                const dirsToSearch = ['/goals', '/profiles', '/uploads', '/'];
+                for (const dir of dirsToSearch) {
+                    const listResult = await this.fetchFileList(dir);
+                    if (listResult.success && listResult.data && listResult.data.list) {
+                        const fileObj = listResult.data.list.find(f =>
+                            String(f.fs_id) === String(fileId) ||
+                            f.server_filename === fileId ||
+                            f.path === fileId
+                        );
+                        if (fileObj) {
+                            actualFsId = fileObj.fs_id;
+                            filename = fileObj.server_filename;
+                            filePath = fileObj.path;
+                            console.log(`[TeraboxService] Resolved ${fileId} to path: ${filePath} in ${dir}`);
+                            break;
+                        }
                     }
-                } else {
-                    throw new Error(`Failed to list directory: ${dir}`);
                 }
             }
 
             const creds = this._getCredentials();
-            const downloadResult = await this.getDownloadLink(creds.ndus, actualFsId, creds.appId, creds.jsToken, creds.dpLogId);
+            const cookies = this._getCookies(creds);
 
+            // Get download link using the standard method (handshake-based)
+            const downloadResult = await this.getDownloadLink(creds.ndus, actualFsId, creds.appId, creds.jsToken, creds.dpLogId);
             if (!downloadResult.success) {
+                // If handshake fails, try Rest 2.0 as fallback if we have the path
+                if (filePath) {
+                    console.log(`[TeraboxService] Handshake failed, trying Rest 2.0 fallback for path: ${filePath}`);
+                    const downloadUrl = `https://dm.terabox.com/rest/2.0/pcs/file?method=download&app_id=${creds.appId}&path=${encodeURIComponent(filePath)}`;
+                    const response = await axios({
+                        method: 'get',
+                        url: downloadUrl,
+                        responseType: 'stream',
+                        headers: {
+                            'Cookie': cookies,
+                            'User-Agent': this.userAgent,
+                            'Referer': 'https://dm.terabox.com/main'
+                        }
+                    });
+                    return { stream: response.data, contentLength: response.headers['content-length'], contentType: response.headers['content-type'], filename };
+                }
                 throw new Error(downloadResult.message || "Failed to get download link.");
             }
 
-            const dlink = downloadResult.downloadLink;
-            const cookies = this._getCookies(creds);
-
-            console.log(`[TeraboxService] Fetching stream from dlink: ${dlink}`);
+            const downloadUrl = downloadResult.downloadLink;
+            console.log(`[TeraboxService] Fetching stream from dlink: ${downloadUrl}`);
             const response = await axios({
                 method: 'get',
-                url: dlink,
+                url: downloadUrl,
                 responseType: 'stream',
                 headers: {
                     'Cookie': cookies,
                     'User-Agent': this.userAgent,
-                    // Add other headers if necessary found in testing
+                    'Referer': 'https://dm.terabox.com/main'
                 }
             });
 

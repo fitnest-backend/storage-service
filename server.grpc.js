@@ -1,9 +1,9 @@
+require('dotenv').config();
 const grpc = require('@grpc/grpc-js');
 const protoLoader = require('@grpc/proto-loader');
 const path = require('path');
 const fs = require('fs');
 const teraboxService = require('./src/services/terabox.service');
-require('dotenv').config();
 
 const PROTO_PATH = path.join(__dirname, 'protos/terabox.proto');
 const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
