@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const { initRedis } = require('./src/config/redis');
 
 console.log('Loading routes...');
 const uploadRoutes = require('./src/routes/upload.routes');
@@ -23,6 +24,8 @@ app.get('/health', (req, res) => {
 });
 
 console.log(`Starting server on port ${PORT}...`);
-app.listen(PORT, () => {
-    console.log(`TeraBox HTTP worker listening on port ${PORT}`);
+initRedis().then(() => {
+    app.listen(PORT, () => {
+        console.log(`TeraBox HTTP worker listening on port ${PORT}`);
+    });
 });

@@ -15,7 +15,6 @@ const {
 class TeraboxService {
     constructor() {
         this.userAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15';
-        this.dlinkCache = new Map(); // fsId -> { dlink, expires }
     }
 
     _generateDpLogId() {
@@ -441,40 +440,29 @@ class TeraboxService {
 
     // Local getDownloadLink function to avoid import issues
     async getDownloadLink(ndus, fid, appId, jsToken, dpLogId) {
-        try {
-            // Check cache first
-            const cached = this.dlinkCache.get(fid);
-            if (cached && cached.expires > Date.now()) {
-                console.log(`[TeraboxService] Using cached dlink for ${fid}`);
-                return { success: true, message: "Download link retrieved from cache.", downloadLink: cached.dlink };
-            }
+        const { getDlinkShared } = require('../utils/dlink-cache');
 
+        return getDlinkShared(fid, async (fsId) => {
             const homeInfo = await this._fetchHomeInfo(ndus);
             if (!homeInfo.success || !homeInfo.data || !homeInfo.data.sign3 || !homeInfo.data.sign1 || !homeInfo.data.timestamp) {
                 console.error('[TeraboxService] Failed to fetch home info:', homeInfo);
-                return { success: false, message: "Invalid home information received or failed to fetch." };
+                throw new Error("Invalid home information received or failed to fetch.");
             }
 
             const sign = this._generateSign(homeInfo.data.sign3, homeInfo.data.sign1);
-            if (!sign) return { success: false, message: "Failed to generate sign." };
+            if (!sign) throw new Error("Failed to generate sign.");
 
-            const res = await this._generateDownload(sign, fid, homeInfo.data.timestamp, ndus, appId, jsToken, dpLogId);
+            const res = await this._generateDownload(sign, fsId, homeInfo.data.timestamp, ndus, appId, jsToken, dpLogId);
             if (!res || !res.downloadLink[0]?.dlink) {
-                return { success: false, message: res.message || "Failed to retrieve download link." };
+                throw new Error(res.message || "Failed to retrieve download link.");
             }
 
-            const dlink = res.downloadLink[0].dlink;
-
-            // Cache the result for 15 minutes (Terabox links are usually valid for 8 hours, but 15m is safer)
-            this.dlinkCache.set(fid, {
-                dlink: dlink,
-                expires: Date.now() + 15 * 60 * 1000
-            });
-
+            return res.downloadLink[0].dlink;
+        }).then(dlink => {
             return { success: true, message: "Download link retrieved successfully.", downloadLink: dlink };
-        } catch (error) {
+        }).catch(error => {
             return { success: false, message: error.message || "Unknown error occurred." };
-        }
+        });
     }
 
     async getFileStream(fileId) {
