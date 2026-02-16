@@ -424,8 +424,9 @@ class TeraboxService {
     async getDownloadLink(ndus, fid, appId, jsToken, dpLogId) {
         try {
             const homeInfo = await this._fetchHomeInfo(ndus);
-            if (!homeInfo || !homeInfo.data.sign3 || !homeInfo.data.sign1 || !homeInfo.data.timestamp) {
-                return { success: false, message: "Invalid home information received." };
+            if (!homeInfo.success || !homeInfo.data || !homeInfo.data.sign3 || !homeInfo.data.sign1 || !homeInfo.data.timestamp) {
+                console.error('[TeraboxService] Failed to fetch home info:', homeInfo);
+                return { success: false, message: "Invalid home information received or failed to fetch." };
             }
 
             const sign = this._generateSign(homeInfo.data.sign3, homeInfo.data.sign1);
