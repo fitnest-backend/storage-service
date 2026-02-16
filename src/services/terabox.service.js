@@ -15,6 +15,7 @@ const {
 class TeraboxService {
     constructor() {
         this.userAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15';
+        this.dlinkCache = new Map(); // fsId -> { dlink, expires }
     }
 
     _generateDpLogId() {
@@ -441,6 +442,13 @@ class TeraboxService {
     // Local getDownloadLink function to avoid import issues
     async getDownloadLink(ndus, fid, appId, jsToken, dpLogId) {
         try {
+            // Check cache first
+            const cached = this.dlinkCache.get(fid);
+            if (cached && cached.expires > Date.now()) {
+                console.log(`[TeraboxService] Using cached dlink for ${fid}`);
+                return { success: true, message: "Download link retrieved from cache.", downloadLink: cached.dlink };
+            }
+
             const homeInfo = await this._fetchHomeInfo(ndus);
             if (!homeInfo.success || !homeInfo.data || !homeInfo.data.sign3 || !homeInfo.data.sign1 || !homeInfo.data.timestamp) {
                 console.error('[TeraboxService] Failed to fetch home info:', homeInfo);
@@ -455,7 +463,15 @@ class TeraboxService {
                 return { success: false, message: res.message || "Failed to retrieve download link." };
             }
 
-            return { success: true, message: "Download link retrieved successfully.", downloadLink: res.downloadLink[0].dlink };
+            const dlink = res.downloadLink[0].dlink;
+
+            // Cache the result for 15 minutes (Terabox links are usually valid for 8 hours, but 15m is safer)
+            this.dlinkCache.set(fid, {
+                dlink: dlink,
+                expires: Date.now() + 15 * 60 * 1000
+            });
+
+            return { success: true, message: "Download link retrieved successfully.", downloadLink: dlink };
         } catch (error) {
             return { success: false, message: error.message || "Unknown error occurred." };
         }
