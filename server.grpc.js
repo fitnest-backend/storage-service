@@ -4,7 +4,6 @@ const protoLoader = require('@grpc/proto-loader');
 const path = require('path');
 const fs = require('fs');
 const teraboxService = require('./src/services/terabox.service');
-const { initRedis } = require('./src/config/redis');
 
 const PROTO_PATH = path.join(__dirname, 'protos/terabox.proto');
 const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
@@ -192,7 +191,6 @@ const deleteFiles = async (call, callback) => {
 };
 
 const main = async () => {
-    await initRedis();
     const server = new grpc.Server();
     server.addService(teraboxProto.TeraBoxService.service, {
         UploadFile: uploadFile,
