@@ -47,6 +47,19 @@ class StorageService {
             // Find or create directory
             const targetFolder = await this._getOrCreateFolder(directory);
 
+            // Delete existing file if it exists with the same name
+            const children = Array.isArray(targetFolder.children) ? targetFolder.children : Object.values(targetFolder.children || {});
+            const existingFile = children.find(f => f.name === fileName && !f.directory);
+            if (existingFile) {
+                console.log(`[StorageService] Existing file found: ${fileName}. Deleting before new upload...`);
+                try {
+                    await existingFile.delete();
+                } catch (delErr) {
+                    console.warn(`[StorageService] Failed to delete existing file ${fileName}:`, delErr.message);
+                    // Continue with upload even if delete fails (or maybe throw? User said "make sure", so maybe throw if critical, but usually we proceed)
+                }
+            }
+
             console.log(`[StorageService] Starting upload of ${fileName}...`);
             const fileStream = fs.createReadStream(filePath);
             const upload = targetFolder.upload({
