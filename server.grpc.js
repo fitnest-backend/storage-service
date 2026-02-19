@@ -1,4 +1,4 @@
-require('dotenv').config();
+const config = require('./src/config/terabox.config');
 const grpc = require('@grpc/grpc-js');
 const protoLoader = require('@grpc/proto-loader');
 const path = require('path');
@@ -201,7 +201,7 @@ const main = async () => {
         DeleteFiles: deleteFiles
     });
 
-    const port = process.env.TERABOX_WORKER_PORT || '9090';
+    const port = config.server.port || '9090';
     const address = `0.0.0.0:${port}`;
 
     server.bindAsync(address, grpc.ServerCredentials.createInsecure(), (err, port) => {

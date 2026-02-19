@@ -1,4 +1,4 @@
-require('dotenv').config();
+const config = require('./src/config/terabox.config');
 const express = require('express');
 const cors = require('cors');
 const { initRedis } = require('./src/config/redis');
@@ -10,7 +10,7 @@ const { streamTeraboxFile } = require('./src/controllers/upload.controller');
 console.log('Routes loaded');
 
 const app = express();
-const PORT = process.env.TERABOX_WORKER_PORT || 9090;
+const PORT = config.server.port || 9090;
 
 app.use(cors());
 app.use(express.json());

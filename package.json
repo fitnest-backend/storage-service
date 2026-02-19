@@ -14,10 +14,14 @@
     "cors": "^2.8.5",
     "dotenv": "^17.3.1",
     "express": "^4.18.2",
+    "filesize": "^11.0.13",
     "form-data": "^4.0.1",
     "ioredis": "^5.9.3",
     "multer": "1.4.5-lts.1",
     "puppeteer": "^21.5.0",
-    "terabox-upload-tool": "file:../terabox-upload-tool"
+    "terabox-api": "^2.6.2",
+    "terabox-upload-tool": "file:../terabox-upload-tool",
+    "undici": "^7.22.0",
+    "yaml": "^2.8.2"
   }
 }
