@@ -2,21 +2,17 @@ FROM node:18-slim
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y wget gnupg ca-certificates procps \
-    && apt-get install -y chromium \
-    && rm -rf /var/lib/apt/lists/*
+# Copy package.json and package-lock.json
+COPY package*.json ./
 
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
-ENV PUPPETEER_ARGS="--no-sandbox,--disable-setuid-sandbox"
+# Install production dependencies only
+RUN npm install --omit=dev
 
-# Copy package.json and install dependencies
-COPY package.json ./
-RUN npm install
-
-# Copy source and proto
+# Copy the rest of the application
 COPY . .
-# Explicitly copy server.grpc.js to be sure
-COPY server.grpc.js .
+
+# Ensure temp directory exists for uploads
+RUN mkdir -p temp_uploads
 
 # Expose gRPC port
 EXPOSE 9090
