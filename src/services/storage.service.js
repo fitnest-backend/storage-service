@@ -300,4 +300,6 @@ class StorageService {
     }
 }
 
-module.exports = new StorageService();
+const instance = new StorageService();
+module.exports = instance;
+module.exports.StorageService = StorageService;

@@ -9,6 +9,7 @@ const protoLoader = require('@grpc/proto-loader');
 const path = require('path');
 const fs = require('fs');
 const storageService = require('./src/services/storage.service');
+const { StorageService } = storageService;
 const { initRedis } = require('./src/config/redis');
 
 const PROTO_PATH = path.join(__dirname, 'protos/storage.proto');
