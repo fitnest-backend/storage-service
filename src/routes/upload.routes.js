@@ -30,6 +30,6 @@ router.get('/', uploadController.getFileList);
 router.get('/download', uploadController.downloadFile);
 router.delete('/', uploadController.deleteFiles);
 router.put('/move', uploadController.moveFile);
-router.delete('/cleanup', uploadController.cleanupRoot);
+router.get('/stream/:fileId', uploadController.streamFile);
 
 module.exports = router;

@@ -1,12 +1,11 @@
-const config = require('./src/config/terabox.config');
+const config = require('./src/config/mega.config');
 const express = require('express');
 const cors = require('cors');
 const { initRedis } = require('./src/config/redis');
 
 console.log('Loading routes...');
 const uploadRoutes = require('./src/routes/upload.routes');
-const authRoutes = require('./src/routes/auth.routes');
-const { streamTeraboxFile } = require('./src/controllers/upload.controller');
+const { streamFile } = require('./src/controllers/upload.controller');
 console.log('Routes loaded');
 
 const app = express();
@@ -17,7 +16,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use('/api/v1/files', uploadRoutes);
-app.use('/api/v1/auth', authRoutes);
+app.get('/stream/:fileId', streamFile);
 
 app.get('/health', (req, res) => {
     res.status(200).json({ status: 'UP' });
@@ -26,6 +25,6 @@ app.get('/health', (req, res) => {
 console.log(`Starting server on port ${PORT}...`);
 initRedis().then(() => {
     app.listen(PORT, () => {
-        console.log(`TeraBox HTTP worker listening on port ${PORT}`);
+        console.log(`Mega Storage HTTP worker listening on port ${PORT}`);
     });
 });

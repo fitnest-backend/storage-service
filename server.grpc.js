@@ -1,12 +1,12 @@
-const config = require('./src/config/terabox.config');
+const config = require('./src/config/mega.config');
 const grpc = require('@grpc/grpc-js');
 const protoLoader = require('@grpc/proto-loader');
 const path = require('path');
 const fs = require('fs');
-const teraboxService = require('./src/services/terabox.service');
+const storageService = require('./src/services/mega.service');
 const { initRedis } = require('./src/config/redis');
 
-const PROTO_PATH = path.join(__dirname, 'protos/terabox.proto');
+const PROTO_PATH = path.join(__dirname, 'protos/storage.proto');
 const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
     keepCase: true,
     longs: String,
@@ -15,7 +15,7 @@ const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
     oneofs: true
 });
 
-const teraboxProto = grpc.loadPackageDefinition(packageDefinition).az.fitnest.terabox;
+const storageProto = grpc.loadPackageDefinition(packageDefinition).az.fitnest.storage;
 
 // Ensure temp directory exists
 const TEMP_DIR = path.join(__dirname, 'temp_uploads');
@@ -47,9 +47,9 @@ const uploadFile = (call, callback) => {
             writeStream.on('finish', async () => {
                 try {
                     const finalDirectory = metadata.directory || '/uploads';
-                    console.log(`[gRPC] File received. Uploading to TeraBox: ${finalDirectory}`);
+                    console.log(`[gRPC] File received. Uploading to MEGA: ${finalDirectory}`);
 
-                    const result = await teraboxService.uploadFile(tempFilePath, finalDirectory);
+                    const result = await storageService.uploadFile(tempFilePath, finalDirectory);
 
                     // Cleanup temp file
                     try {
@@ -59,8 +59,9 @@ const uploadFile = (call, callback) => {
                     }
 
                     if (result.success) {
-                        // Cleanup root (optional but good for hygiene)
-                        teraboxService.cleanupRoot().catch(e => console.error('[gRPC] Root cleanup failed:', e));
+                        // Map string nodeId to a simple numerical hash for int64 fs_id field
+                        const hash = result.fileDetails.nodeId ?
+                            result.fileDetails.nodeId.split('').reduce((a, b) => { a = ((a << 5) - a) + b.charCodeAt(0); return a & a; }, 0) : 0;
 
                         callback(null, {
                             success: true,
@@ -68,8 +69,8 @@ const uploadFile = (call, callback) => {
                             data: {
                                 path: result.fileDetails.path,
                                 size: result.fileDetails.size,
-                                md5: result.fileDetails.md5,
-                                fs_id: result.fileDetails.fs_id
+                                md5: result.fileDetails.md5 || '',
+                                fs_id: Math.abs(hash)
                             }
                         });
                     } else {
@@ -111,7 +112,7 @@ const getDownloadUrl = async (call, callback) => {
     console.log(`[gRPC] GetDownloadUrl for fileId: ${fileId}`);
 
     try {
-        const result = await teraboxService.downloadFile(fileId);
+        const result = await storageService.downloadFile(fileId);
         callback(null, {
             success: true,
             message: 'Download URL retrieved',
@@ -131,7 +132,7 @@ const downloadFile = async (call) => {
     console.log(`[gRPC] DownloadFile request for fileId: ${fileId}`);
 
     try {
-        const { stream, contentLength, contentType, filename } = await teraboxService.getFileStream(fileId);
+        const { stream, contentLength, contentType, filename } = await storageService.getFileStream(fileId);
 
         // Send metadata first
         call.write({
@@ -170,7 +171,7 @@ const deleteFiles = async (call, callback) => {
     console.log(`[gRPC] DeleteFiles: ${JSON.stringify(paths)}`);
 
     try {
-        const result = await teraboxService.deleteFiles(paths);
+        const result = await storageService.deleteFiles(paths);
         if (result.success) {
             callback(null, {
                 success: true,
@@ -194,7 +195,7 @@ const deleteFiles = async (call, callback) => {
 const main = async () => {
     await initRedis();
     const server = new grpc.Server();
-    server.addService(teraboxProto.TeraBoxService.service, {
+    server.addService(storageProto.StorageService.service, {
         UploadFile: uploadFile,
         GetDownloadUrl: getDownloadUrl,
         DownloadFile: downloadFile,
@@ -209,7 +210,7 @@ const main = async () => {
             console.error(`Failed to bind gRPC server: ${err}`);
             return;
         }
-        console.log(`TeraBox gRPC worker listening on ${address}`);
+        console.log(`Mega Storage gRPC worker listening on ${address}`);
         server.start();
     });
 };

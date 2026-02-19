@@ -1,6 +1,5 @@
-const teraboxService = require('../services/terabox.service');
+const storageService = require('../services/mega.service');
 const fs = require('fs').promises;
-const axios = require('axios');
 
 async function uploadFile(req, res) {
     try {
@@ -21,10 +20,10 @@ async function uploadFile(req, res) {
         } else if (directory) {
             finalDirectory = directory;
         }
-        console.log(`Uploading to TeraBox directory: ${finalDirectory}`);
+        console.log(`Uploading to MEGA directory: ${finalDirectory}`);
 
-        const result = await teraboxService.uploadFile(file.path, finalDirectory);
-        console.log('TeraBox service result:', JSON.stringify(result));
+        const result = await storageService.uploadFile(file.path, finalDirectory);
+        console.log('MEGA service result:', JSON.stringify(result));
 
         // Clean up temp file
         try {
@@ -34,21 +33,13 @@ async function uploadFile(req, res) {
         }
 
         if (result.success) {
-            // Clean up extra root directories after successful upload
-            try {
-                const cleanupResult = await teraboxService.cleanupRoot();
-                console.log('Cleanup result:', cleanupResult);
-            } catch (cleanupErr) {
-                console.error('Failed to clean up root directories:', cleanupErr);
-            }
-
             res.json({
                 success: true,
                 message: 'File uploaded successfully',
                 data: result.fileDetails
             });
         } else {
-            console.error('TeraBox upload failed logic:', result.message);
+            console.error('MEGA upload failed logic:', result.message);
             res.status(500).json({
                 success: false,
                 message: result.message
@@ -60,7 +51,6 @@ async function uploadFile(req, res) {
             try {
                 await fs.unlink(req.file.path);
             } catch (unlinkError) {
-                // Log the error but don't fail the main request because of cleanup failure
                 console.error('Failed to clean up temp file in error handler:', unlinkError);
             }
         }
@@ -74,21 +64,7 @@ async function uploadFile(req, res) {
 async function getFileList(req, res) {
     try {
         const directory = req.query.directory || '/';
-        const result = await teraboxService.fetchFileList(directory);
-        if (result.success && result.data && result.data.list) {
-            // Add download URLs for files
-            const files = result.data.list.filter(item => item.isdir === 0); // files only
-            const urlPromises = files.map(async (file) => {
-                try {
-                    const downloadResult = await teraboxService.downloadFile(file.fs_id);
-                    file.download_url = downloadResult; // assuming downloadFile returns the URL
-                } catch (err) {
-                    console.error(`Failed to get download URL for ${file.fs_id}:`, err);
-                    file.download_url = null;
-                }
-            });
-            await Promise.all(urlPromises);
-        }
+        const result = await storageService.fetchFileList(directory);
         res.json(result);
     } catch (error) {
         console.error('Fetch file list error:', error);
@@ -106,7 +82,7 @@ async function downloadFile(req, res) {
             return res.status(400).json({ success: false, message: 'fileId query parameter is required' });
         }
 
-        const result = await teraboxService.downloadFile(fileId);
+        const result = await storageService.downloadFile(fileId);
         res.json({
             success: true,
             message: 'Download URL generated',
@@ -128,7 +104,7 @@ async function deleteFiles(req, res) {
             return res.status(400).json({ success: false, message: 'paths array is required' });
         }
 
-        const result = await teraboxService.deleteFiles(paths);
+        const result = await storageService.deleteFiles(paths);
         res.json(result);
     } catch (error) {
         console.error('Delete error:', error);
@@ -146,7 +122,7 @@ async function moveFile(req, res) {
             return res.status(400).json({ success: false, message: 'old_path and new_path are required' });
         }
 
-        const result = await teraboxService.moveFile(old_path, new_path, new_name);
+        const result = await storageService.moveFiles([{ path: old_path, dest: new_path, newname: new_name }]);
         res.json(result);
     } catch (error) {
         console.error('Move error:', error);
@@ -157,51 +133,29 @@ async function moveFile(req, res) {
     }
 }
 
-async function cleanupRoot(req, res) {
+async function streamFile(req, res) {
     try {
-        const result = await teraboxService.cleanupRoot();
-        res.json(result);
-    } catch (error) {
-        console.error('Cleanup error:', error);
-        res.status(500).json({
-            success: false,
-            message: error.message || 'Cleanup failed'
+        const fileId = req.params.fileId || req.params.fsId;
+        const { stream, contentLength, contentType, filename } = await storageService.getFileStream(fileId);
+
+        if (contentType) res.setHeader("Content-Type", contentType);
+        if (contentLength) res.setHeader("Content-Length", contentLength);
+        res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
+        res.setHeader("Cache-Control", "public, max-age=3600");
+
+        stream.pipe(res);
+
+        stream.on('error', (err) => {
+            console.error('[UploadController] Stream error:', err);
+            if (!res.headersSent) {
+                res.status(500).send('Stream error');
+            }
         });
-    }
-}
-
-async function streamTeraboxFile(req, res) {
-    try {
-        const fsId = req.params.fsId;
-        const result = await teraboxService.downloadFile(fsId);
-        const dlink = result.dlink;
-
-        // IMPORTANT: many dlinks require auth cookies and a browser-like UA.
-        const upstream = await axios.get(dlink, {
-            responseType: "stream",
-            // follow redirects to the real CDN url
-            maxRedirects: 5,
-            headers: {
-                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15",
-                // If TeraBox requires cookies for dlink GET, reuse your cookie builder
-                Cookie: `lang=en; ndus=${require('../config/terabox.config').credentials.ndus};`,
-            },
-            validateStatus: () => true,
-        });
-
-        if (upstream.status >= 400) {
-            res.status(502).json({ success: false, message: "Upstream fetch failed", status: upstream.status });
-            upstream.data?.destroy?.();
-            return;
-        }
-
-        // pass through content type + caching hints
-        if (upstream.headers["content-type"]) res.setHeader("Content-Type", upstream.headers["content-type"]);
-        res.setHeader("Cache-Control", "public, max-age=3600"); // tune this
-
-        upstream.data.pipe(res);
     } catch (e) {
-        res.status(500).json({ success: false, message: e.message || "stream failed" });
+        console.error('[UploadController] Stream failed:', e);
+        if (!res.headersSent) {
+            res.status(500).json({ success: false, message: e.message || "stream failed" });
+        }
     }
 }
 
@@ -211,6 +165,5 @@ module.exports = {
     downloadFile,
     deleteFiles,
     moveFile,
-    cleanupRoot,
-    streamTeraboxFile
+    streamFile
 };
