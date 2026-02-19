@@ -1,4 +1,4 @@
-const storageService = require('../services/mega.service');
+const storageService = require('../services/storage.service');
 const fs = require('fs').promises;
 
 async function uploadFile(req, res) {
