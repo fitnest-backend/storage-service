@@ -1,3 +1,8 @@
+if (!globalThis.crypto) {
+    const { webcrypto } = require('node:crypto');
+    globalThis.crypto = webcrypto;
+}
+
 const config = require('./src/config/storage.config');
 const grpc = require('@grpc/grpc-js');
 const protoLoader = require('@grpc/proto-loader');
@@ -211,7 +216,6 @@ const main = async () => {
             return;
         }
         console.log(`Storage gRPC worker listening on ${address}`);
-        server.start();
     });
 };
 

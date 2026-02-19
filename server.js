@@ -1,3 +1,8 @@
+if (!globalThis.crypto) {
+    const { webcrypto } = require('node:crypto');
+    globalThis.crypto = webcrypto;
+}
+
 const config = require('./src/config/storage.config');
 const express = require('express');
 const cors = require('cors');
