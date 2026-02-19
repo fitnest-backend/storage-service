@@ -1,4 +1,4 @@
-name: TeraBox Worker CI/CD
+name: Storage Service CI/CD
 
 on:
   push:
@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  IMAGE_NAME: ghcr.io/fitnest-backend/terabox-worker-service
+  IMAGE_NAME: ghcr.io/fitnest-backend/storage-service
   HELM_VALUES_FILE: values.yaml
 
 jobs:
@@ -70,7 +70,7 @@ jobs:
       - name: Checkout Helm repo via SSH
         uses: actions/checkout@v4
         with:
-          repository: fitnest-chart/terabox-worker-service
+          repository: fitnest-chart/storage-service
           ref: ${{ github.ref_name }}
           path: helm-repo
           ssh-key: ${{ secrets.CHART_REPO_SSH_PRIVATE_KEY }}
@@ -124,5 +124,5 @@ jobs:
           curl -k -X POST \
             -H "Authorization: Bearer ${ARGOCD_TOKEN}" \
             -H "Content-Type: application/json" \
-            http://161.97.183.7:31052/api/v1/applications/fitnest-terabox-worker-service-dev/sync \
+            http://161.97.183.7:31052/api/v1/applications/fitnest-storage-service-dev/sync \
             -d '{}'
