@@ -36,7 +36,7 @@ class StorageService {
         }
     }
 
-    async uploadFile(filePath, directory = '/') {
+    async uploadFile(filePath, directory = '/', oldPath = null) {
         await this.ensureInitialized();
         try {
             const fileName = path.basename(filePath);
@@ -47,16 +47,28 @@ class StorageService {
             // Find or create directory
             const targetFolder = await this._getOrCreateFolder(directory);
 
-            // Delete existing file if it exists with the same name
+            // 1. Delete explicit old path if provided
+            if (oldPath) {
+                console.log(`[StorageService] Explicit old path provided: ${oldPath}. Deleting...`);
+                try {
+                    const oldFile = await this._getFileOrFolder(oldPath);
+                    if (oldFile) {
+                        await oldFile.delete();
+                    }
+                } catch (delErr) {
+                    console.warn(`[StorageService] Failed to delete explicit old path ${oldPath}:`, delErr.message);
+                }
+            }
+
+            // 2. Fallback: Delete existing file if it exists with the same name in the target folder
             const children = Array.isArray(targetFolder.children) ? targetFolder.children : Object.values(targetFolder.children || {});
             const existingFile = children.find(f => f.name === fileName && !f.directory);
             if (existingFile) {
-                console.log(`[StorageService] Existing file found: ${fileName}. Deleting before new upload...`);
+                console.log(`[StorageService] Existing file found with same name: ${fileName}. Deleting...`);
                 try {
                     await existingFile.delete();
                 } catch (delErr) {
-                    console.warn(`[StorageService] Failed to delete existing file ${fileName}:`, delErr.message);
-                    // Continue with upload even if delete fails (or maybe throw? User said "make sure", so maybe throw if critical, but usually we proceed)
+                    console.warn(`[StorageService] Failed to delete existing same-name file ${fileName}:`, delErr.message);
                 }
             }
 

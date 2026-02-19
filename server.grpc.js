@@ -52,9 +52,10 @@ const uploadFile = (call, callback) => {
             writeStream.on('finish', async () => {
                 try {
                     const finalDirectory = metadata.directory || '/uploads';
+                    const oldPath = metadata.old_path || null;
                     console.log(`[gRPC] File received. Uploading to MEGA: ${finalDirectory}`);
 
-                    const result = await storageService.uploadFile(tempFilePath, finalDirectory);
+                    const result = await storageService.uploadFile(tempFilePath, finalDirectory, oldPath);
 
                     // Cleanup temp file
                     try {
