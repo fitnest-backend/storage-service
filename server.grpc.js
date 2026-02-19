@@ -65,9 +65,7 @@ const uploadFile = (call, callback) => {
                     }
 
                     if (result.success) {
-                        // Map string nodeId to a simple numerical hash for int64 fs_id field
-                        const hash = result.fileDetails.nodeId ?
-                            result.fileDetails.nodeId.split('').reduce((a, b) => { a = ((a << 5) - a) + b.charCodeAt(0); return a & a; }, 0) : 0;
+                        const fsId = StorageService.hashNodeId(result.fileDetails.nodeId);
 
                         callback(null, {
                             success: true,
@@ -76,7 +74,7 @@ const uploadFile = (call, callback) => {
                                 path: result.fileDetails.path,
                                 size: result.fileDetails.size,
                                 md5: result.fileDetails.md5 || '',
-                                fs_id: Math.abs(hash)
+                                fs_id: fsId
                             }
                         });
                     } else {

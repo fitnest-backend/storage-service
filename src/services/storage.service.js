@@ -4,6 +4,15 @@ const path = require('path');
 const config = require('../config/storage.config');
 
 class StorageService {
+    static hashNodeId(nodeId) {
+        if (!nodeId) return 0;
+        const hash = nodeId.split('').reduce((a, b) => {
+            a = ((a << 5) - a) + b.charCodeAt(0);
+            return a & a;
+        }, 0);
+        return Math.abs(hash);
+    }
+
     constructor() {
         this.storage = null;
         this.initialized = false;
@@ -177,15 +186,7 @@ class StorageService {
         await this.ensureInitialized();
         try {
             console.log(`[StorageService] Getting download URL for: ${fileId}`);
-            let file;
-            // Search for file by nodeId
-            for (const f of Object.values(this.storage.files)) {
-                if (f.nodeId === fileId) {
-                    file = f;
-                    break;
-                }
-            }
-
+            const file = await this._getFileById(fileId);
             if (!file) throw new Error('File not found');
 
             const url = await file.link();
@@ -200,14 +201,7 @@ class StorageService {
         await this.ensureInitialized();
         try {
             console.log(`[StorageService] Getting file stream for: ${fileId}`);
-            let file;
-            for (const f of Object.values(this.storage.files)) {
-                if (f.nodeId === fileId) {
-                    file = f;
-                    break;
-                }
-            }
-
+            const file = await this._getFileById(fileId);
             if (!file) throw new Error('File not found');
 
             return {
@@ -220,6 +214,18 @@ class StorageService {
             console.error('[StorageService] Get file stream failed:', error.message);
             throw error;
         }
+    }
+
+    async _getFileById(id) {
+        await this.ensureInitialized();
+        const idNum = parseInt(id, 10);
+        for (const f of Object.values(this.storage.files)) {
+            // Check literal nodeId
+            if (f.nodeId === id) return f;
+            // Check hashed fsId
+            if (!isNaN(idNum) && StorageService.hashNodeId(f.nodeId) === idNum) return f;
+        }
+        return null;
     }
 
     // Helper to traverse or create folder structure
@@ -275,7 +281,14 @@ class StorageService {
     }
 
     async _getFileOrFolder(fullPath) {
-        if (fullPath === '/' || fullPath === '') return this.storage.root;
+        if (!fullPath || fullPath === '/' || fullPath === '') return this.storage.root;
+
+        // If it looks like an ID/hash (no slashes), try finding by ID first
+        if (!fullPath.includes('/') && fullPath !== '.' && fullPath !== '..') {
+            const file = await this._getFileById(fullPath);
+            if (file) return file;
+        }
+
         const parts = fullPath.split('/').filter(p => p);
         const fileName = parts.pop();
         const folderPath = parts.join('/');
@@ -283,7 +296,7 @@ class StorageService {
         const folder = await this._getFolder(folderPath);
         if (!folder) return null;
 
-        return folder.children.find(f => f.name === fileName);
+        return (folder.children || []).find(f => f.name === fileName);
     }
 }
 
