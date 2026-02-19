@@ -210,7 +210,7 @@ const main = async () => {
             console.error(`Failed to bind gRPC server: ${err}`);
             return;
         }
-        console.log(`Mega Storage gRPC worker listening on ${address}`);
+        console.log(`Storage gRPC worker listening on ${address}`);
         server.start();
     });
 };

@@ -1,2 +1,2 @@
-# mega-storage-worker
-Standalone worker for MEGA storage integration.
+# storage-service
+Standalone worker for file storage integration.

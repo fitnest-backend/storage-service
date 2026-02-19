@@ -25,6 +25,6 @@ app.get('/health', (req, res) => {
 console.log(`Starting server on port ${PORT}...`);
 initRedis().then(() => {
     app.listen(PORT, () => {
-        console.log(`Mega Storage HTTP worker listening on port ${PORT}`);
+        console.log(`Storage HTTP worker listening on port ${PORT}`);
     });
 });
