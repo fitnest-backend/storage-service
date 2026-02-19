@@ -1,9 +1,9 @@
-const config = require('./src/config/mega.config');
+const config = require('./src/config/storage.config');
 const grpc = require('@grpc/grpc-js');
 const protoLoader = require('@grpc/proto-loader');
 const path = require('path');
 const fs = require('fs');
-const storageService = require('./src/services/mega.service');
+const storageService = require('./src/services/storage.service');
 const { initRedis } = require('./src/config/redis');
 
 const PROTO_PATH = path.join(__dirname, 'protos/storage.proto');

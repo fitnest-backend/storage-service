@@ -1,4 +1,4 @@
-const config = require('./src/config/mega.config');
+const config = require('./src/config/storage.config');
 const express = require('express');
 const cors = require('cors');
 const { initRedis } = require('./src/config/redis');
