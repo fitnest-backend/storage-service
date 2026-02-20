@@ -29,7 +29,31 @@ if (!fs.existsSync(TEMP_DIR)) {
     fs.mkdirSync(TEMP_DIR);
 }
 
+const extractPatternAContext = (call) => {
+    const metadata = call.metadata.getMap();
+    const gatewayFlag = metadata['x-from-gateway'];
+    const userId = metadata['x-user-id'];
+    const requestId = metadata['x-request-id'];
+    const caller = metadata['x-service-name'];
+
+    if (gatewayFlag === '1' && userId) {
+        return {
+            id: userId,
+            requestId: requestId,
+            caller: caller,
+            tenantId: metadata['x-tenant-id'],
+            scopes: metadata['x-scopes']?.split(' ') || []
+        };
+    }
+    return null;
+};
+
 const uploadFile = (call, callback) => {
+    const context = extractPatternAContext(call);
+    if (context) {
+        console.log(`[gRPC] Authenticated user ${context.id} via Pattern A (from ${context.caller})`);
+    }
+
     let tempFilePath = '';
     let writeStream = null;
     let metadata = null;
