@@ -91,15 +91,16 @@ const uploadFile = (call, callback) => {
 
                     if (result.success) {
                         const fsId = StorageService.hashNodeId(result.fileDetails.nodeId);
+                        console.log(`[gRPC] returning fsId: ${fsId} for nodeId: ${result.fileDetails.nodeId}`);
 
                         callback(null, {
                             success: true,
                             message: 'File uploaded successfully',
                             data: {
                                 path: result.fileDetails.path,
-                                size: result.fileDetails.size,
+                                size: result.fileDetails.size.toString(),
                                 md5: result.fileDetails.md5 || '',
-                                fs_id: fsId
+                                fs_id: fsId.toString()
                             }
                         });
                     } else {
