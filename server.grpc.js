@@ -1,5 +1,5 @@
 if (!globalThis.crypto) {
-    const { webcrypto } = require('node:crypto');
+    const {webcrypto} = require('node:crypto');
     globalThis.crypto = webcrypto;
 }
 
@@ -9,8 +9,8 @@ const protoLoader = require('@grpc/proto-loader');
 const path = require('path');
 const fs = require('fs');
 const storageService = require('./src/services/storage.service');
-const { StorageService } = storageService;
-const { initRedis } = require('./src/config/redis');
+const {StorageService} = storageService;
+const {initRedis} = require('./src/config/redis');
 
 const PROTO_PATH = path.join(__dirname, 'protos/storage.proto');
 const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
@@ -114,7 +114,8 @@ const uploadFile = (call, callback) => {
                     // Ensure cleanup on error
                     try {
                         if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
-                    } catch (e) { }
+                    } catch (e) {
+                    }
 
                     callback({
                         code: grpc.status.INTERNAL,
@@ -162,7 +163,7 @@ const downloadFile = async (call) => {
     console.log(`[gRPC] DownloadFile request for fileId: ${fileId}`);
 
     try {
-        const { stream, contentLength, contentType, filename } = await storageService.getFileStream(fileId);
+        const {stream, contentLength, contentType, filename} = await storageService.getFileStream(fileId);
 
         // Send metadata first
         call.write({
@@ -174,7 +175,7 @@ const downloadFile = async (call) => {
         });
 
         stream.on('data', (chunk) => {
-            call.write({ file_data: chunk });
+            call.write({file_data: chunk});
         });
 
         stream.on('end', () => {

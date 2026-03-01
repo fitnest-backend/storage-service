@@ -1,9 +1,15 @@
-const { Storage } = require('megajs');
+const {Storage} = require('megajs');
 const fs = require('fs');
 const path = require('path');
 const config = require('../config/storage.config');
 
 class StorageService {
+    constructor() {
+        this.storage = null;
+        this.initialized = false;
+        this.initializationPromise = this._initialize();
+    }
+
     static hashNodeId(nodeId) {
         if (!nodeId) return 0;
         const hash = nodeId.split('').reduce((a, b) => {
@@ -11,12 +17,6 @@ class StorageService {
             return a & a;
         }, 0);
         return Math.abs(hash);
-    }
-
-    constructor() {
-        this.storage = null;
-        this.initialized = false;
-        this.initializationPromise = this._initialize();
     }
 
     async _initialize() {
@@ -105,7 +105,7 @@ class StorageService {
             };
         } catch (error) {
             console.error('[StorageService] Upload failed:', error.message);
-            return { success: false, message: error.message };
+            return {success: false, message: error.message};
         }
     }
 
@@ -114,10 +114,10 @@ class StorageService {
         try {
             console.log(`[StorageService] Creating directory: ${directoryPath}`);
             await this._getOrCreateFolder(directoryPath);
-            return { success: true, message: 'Directory created or already exists' };
+            return {success: true, message: 'Directory created or already exists'};
         } catch (error) {
             console.error('[StorageService] Create directory failed:', error.message);
-            return { success: false, message: error.message };
+            return {success: false, message: error.message};
         }
     }
 
@@ -136,10 +136,10 @@ class StorageService {
                 nodeId: file.nodeId
             }));
 
-            return { success: true, data: { list } };
+            return {success: true, data: {list}};
         } catch (error) {
             console.error('[StorageService] Fetch file list failed:', error.message);
-            return { success: false, message: error.message };
+            return {success: false, message: error.message};
         }
     }
 
@@ -153,10 +153,10 @@ class StorageService {
                     await file.delete();
                 }
             }
-            return { success: true, message: 'Paths deleted successfully' };
+            return {success: true, message: 'Paths deleted successfully'};
         } catch (error) {
             console.error('[StorageService] Delete failed:', error.message);
-            return { success: false, message: error.message };
+            return {success: false, message: error.message};
         }
     }
 
@@ -174,10 +174,10 @@ class StorageService {
                     }
                 }
             }
-            return { success: true, message: 'Files moved successfully' };
+            return {success: true, message: 'Files moved successfully'};
         } catch (error) {
             console.error('[StorageService] Move failed:', error.message);
-            return { success: false, message: error.message };
+            return {success: false, message: error.message};
         }
     }
 
@@ -190,7 +190,7 @@ class StorageService {
             if (!file) throw new Error('File not found');
 
             const url = await file.link();
-            return { success: true, dlink: url };
+            return {success: true, dlink: url};
         } catch (error) {
             console.error('[StorageService] Download URL retrieval failed:', error.message);
             throw error;

@@ -1,4 +1,4 @@
-const { redis } = require('../config/redis');
+const {redis} = require('../config/redis');
 
 const DLINK_TTL = 3600; // 1 hour
 const LOCK_TTL_MS = 12000; // 12 seconds
@@ -7,8 +7,13 @@ const LOCK_PREFIX = 'tb:dlink:lock:';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-function key(fsId) { return `${KEY_PREFIX}${fsId}`; }
-function lockKey(fsId) { return `${LOCK_PREFIX}${fsId}`; }
+function key(fsId) {
+    return `${KEY_PREFIX}${fsId}`;
+}
+
+function lockKey(fsId) {
+    return `${LOCK_PREFIX}${fsId}`;
+}
 
 const UNLOCK_LUA = `
 if redis.call("get", KEYS[1]) == ARGV[1] then
@@ -29,7 +34,8 @@ async function tryLock(k, token) {
 async function unlock(k, token) {
     try {
         await redis.eval(UNLOCK_LUA, 1, k, token);
-    } catch { }
+    } catch {
+    }
 }
 
 /**

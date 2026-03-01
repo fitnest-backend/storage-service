@@ -7,7 +7,7 @@ const fs = require('fs');
 
 const uploadDir = './temp_uploads';
 if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
+    fs.mkdirSync(uploadDir, {recursive: true});
 }
 
 const storage = multer.diskStorage({
@@ -22,7 +22,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
     storage: storage,
-    limits: { fileSize: 50 * 1024 * 1024 } // 50MB limit
+    limits: {fileSize: 50 * 1024 * 1024} // 50MB limit
 });
 
 router.post('/upload', upload.single('file'), uploadController.uploadFile);

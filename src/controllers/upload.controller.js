@@ -6,7 +6,7 @@ async function uploadFile(req, res) {
         const file = req.file;
         if (!file) {
             console.error('Upload attempt with no file');
-            return res.status(400).json({ success: false, message: 'No file uploaded' });
+            return res.status(400).json({success: false, message: 'No file uploaded'});
         }
 
         console.log(`Received file: ${file.originalname}, stored at: ${file.path}, size: ${file.size}`);
@@ -79,7 +79,7 @@ async function downloadFile(req, res) {
     try {
         const fileId = req.query.fileId || req.params.fileId;
         if (!fileId) {
-            return res.status(400).json({ success: false, message: 'fileId query parameter is required' });
+            return res.status(400).json({success: false, message: 'fileId query parameter is required'});
         }
 
         const result = await storageService.downloadFile(fileId);
@@ -101,7 +101,7 @@ async function deleteFiles(req, res) {
     try {
         const paths = req.body;
         if (!paths || !Array.isArray(paths)) {
-            return res.status(400).json({ success: false, message: 'paths array is required' });
+            return res.status(400).json({success: false, message: 'paths array is required'});
         }
 
         const result = await storageService.deleteFiles(paths);
@@ -117,12 +117,12 @@ async function deleteFiles(req, res) {
 
 async function moveFile(req, res) {
     try {
-        const { old_path, new_path, new_name } = req.body;
+        const {old_path, new_path, new_name} = req.body;
         if (!old_path || !new_path) {
-            return res.status(400).json({ success: false, message: 'old_path and new_path are required' });
+            return res.status(400).json({success: false, message: 'old_path and new_path are required'});
         }
 
-        const result = await storageService.moveFiles([{ path: old_path, dest: new_path, newname: new_name }]);
+        const result = await storageService.moveFiles([{path: old_path, dest: new_path, newname: new_name}]);
         res.json(result);
     } catch (error) {
         console.error('Move error:', error);
@@ -136,7 +136,7 @@ async function moveFile(req, res) {
 async function streamFile(req, res) {
     try {
         const fileId = req.params.fileId || req.params.fsId;
-        const { stream, contentLength, contentType, filename } = await storageService.getFileStream(fileId);
+        const {stream, contentLength, contentType, filename} = await storageService.getFileStream(fileId);
 
         if (contentType) res.setHeader("Content-Type", contentType);
         if (contentLength) res.setHeader("Content-Length", contentLength);
@@ -154,7 +154,7 @@ async function streamFile(req, res) {
     } catch (e) {
         console.error('[UploadController] Stream failed:', e);
         if (!res.headersSent) {
-            res.status(500).json({ success: false, message: e.message || "stream failed" });
+            res.status(500).json({success: false, message: e.message || "stream failed"});
         }
     }
 }
