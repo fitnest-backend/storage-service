@@ -1,7 +1,7 @@
-const {Storage} = require('megajs');
-const fs = require('fs');
-const path = require('path');
-const config = require('../config/storage.config');
+import {Storage} from 'megajs';
+import fs from 'fs';
+import path from 'path';
+import config from '../config/storage.config.js';
 
 class StorageService {
     constructor() {
@@ -301,5 +301,5 @@ class StorageService {
 }
 
 const instance = new StorageService();
-module.exports = instance;
-module.exports.StorageService = StorageService;
+export default instance;
+export { StorageService };

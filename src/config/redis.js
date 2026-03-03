@@ -1,4 +1,4 @@
-const Redis = require('ioredis');
+import Redis from 'ioredis';
 
 const redis = new Redis({
     host: process.env.REDIS_HOST || 'redis.fitnest-dev.svc.cluster.local',
@@ -25,7 +25,7 @@ async function initRedis() {
     }
 }
 
-module.exports = {
+export {
     redis,
     initRedis
 };

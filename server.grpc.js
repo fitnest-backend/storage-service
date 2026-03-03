@@ -1,16 +1,22 @@
+import { webcrypto } from 'node:crypto';
+import config from './src/config/storage.config.js';
+import grpc from '@grpc/grpc-js';
+import protoLoader from '@grpc/proto-loader';
+import path from 'path';
+import fs from 'fs';
+import storageService from './src/services/storage.service.js';
+import { StorageService } from './src/services/storage.service.js';
+import { initRedis } from './src/config/redis.js';
+import { fileURLToPath } from 'url';
+
+// Polyfill for globalThis.crypto if needed
 if (!globalThis.crypto) {
-    const {webcrypto} = require('node:crypto');
     globalThis.crypto = webcrypto;
 }
 
-const config = require('./src/config/storage.config');
-const grpc = require('@grpc/grpc-js');
-const protoLoader = require('@grpc/proto-loader');
-const path = require('path');
-const fs = require('fs');
-const storageService = require('./src/services/storage.service');
-const {StorageService} = storageService;
-const {initRedis} = require('./src/config/redis');
+// Get __dirname equivalent in ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const PROTO_PATH = path.join(__dirname, 'protos/storage.proto');
 const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
