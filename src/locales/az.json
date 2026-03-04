@@ -1,0 +1,15 @@
+{
+    "error.unexpected": "Gözlənilməz bir xəta baş verdi. Zəhmət olmasa yenidən cəhd edin.",
+    "error.internal_server_error": "Daxili server xətası baş verdi. Texniki dəstək ilə əlaqə saxlayın.",
+    "error.invalid_json_format": "Yanlış sorğu formatı. Göndərilən məlumatın formatını yoxlayın.",
+    "error.validation": "Daxil edilən məlumatlar yanlışdır. Zəhmət olmasa məlumatları yoxlayın.",
+    "error.resource_not_found": "Resurs tapılmadı.",
+    "error.access_denied": "Giriş imtina edildi. Bu əməliyyat üçün icazəniz yoxdur.",
+    "error.bad_request": "Yanlış sorğu.",
+    "error.no_file_uploaded": "Fayl yüklənməyib.",
+    "error.upload_failed": "Faylın yüklənməsi uğursuz oldu.",
+    "error.fetch_failed": "Məlumatların əldə edilməsi uğursuz oldu.",
+    "error.delete_failed": "Silinmə əməliyyatı uğursuz oldu.",
+    "error.move_failed": "Faylın yerinin dəyişdirilməsi uğursuz oldu.",
+    "error.stream_failed": "Axın əməliyyatı uğursuz oldu."
+}

@@ -1,13 +1,13 @@
-const express = require('express');
-const router = express.Router();
-const uploadController = require('../controllers/upload.controller');
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
+import express from 'express';
+import uploadController from '../controllers/upload.controller.js';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 
+const router = express.Router();
 const uploadDir = './temp_uploads';
 if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, {recursive: true});
+    fs.mkdirSync(uploadDir, { recursive: true });
 }
 
 const storage = multer.diskStorage({
@@ -22,7 +22,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
     storage: storage,
-    limits: {fileSize: 50 * 1024 * 1024} // 50MB limit
+    limits: { fileSize: 50 * 1024 * 1024 } // 50MB limit
 });
 
 router.post('/upload', upload.single('file'), uploadController.uploadFile);
@@ -32,4 +32,4 @@ router.delete('/', uploadController.deleteFiles);
 router.put('/move', uploadController.moveFile);
 router.get('/stream/:fileId', uploadController.streamFile);
 
-module.exports = router;
+export default router;

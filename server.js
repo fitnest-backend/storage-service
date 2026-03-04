@@ -1,16 +1,17 @@
+import crypto from 'node:crypto';
 if (!globalThis.crypto) {
-    const {webcrypto} = require('node:crypto');
-    globalThis.crypto = webcrypto;
+    globalThis.crypto = crypto.webcrypto;
 }
 
-const config = require('./src/config/storage.config');
-const express = require('express');
-const cors = require('cors');
-const {initRedis} = require('./src/config/redis');
+import config from './src/config/storage.config.js';
+import express from 'express';
+import cors from 'cors';
+import { initRedis } from './src/config/redis.js';
 
 console.log('Loading routes...');
-const uploadRoutes = require('./src/routes/upload.routes');
-const {streamFile} = require('./src/controllers/upload.controller');
+import uploadRoutes from './src/routes/upload.routes.js';
+import uploadController from './src/controllers/upload.controller.js';
+const { streamFile } = uploadController;
 console.log('Routes loaded');
 
 const app = express();
@@ -18,7 +19,7 @@ const PORT = config.server.port || 9090;
 
 app.use(cors());
 app.use(express.json());
-app.use(express.urlencoded({extended: true}));
+app.use(express.urlencoded({ extended: true }));
 
 const patternAMiddleware = (req, res, next) => {
     const gatewayFlag = req.header('X-From-Gateway');
@@ -47,7 +48,34 @@ app.get('/stream/:fileId', streamFile);
 app.get('/api/v1/media/stream/:fileId', streamFile);
 
 app.get('/health', (req, res) => {
-    res.status(200).json({status: 'UP'});
+    res.status(200).json({ status: 'UP' });
+});
+
+// Global 404 handler for standardized response
+import { getMessage, ApiResponse, ApiError } from './src/utils/response_util.js';
+app.use((req, res) => {
+    const lang = req.header('Accept-Language')?.startsWith('az') ? 'az' : (req.header('Accept-Language')?.startsWith('ru') ? 'ru' : 'en');
+    const error = ApiError.builder()
+        .code('NOT_FOUND')
+        .message(getMessage('error.resource_not_found', lang))
+        .status(404)
+        .path(req.originalUrl)
+        .build();
+    res.status(404).json(ApiResponse.error(error));
+});
+
+// Global error handler
+app.use((err, req, res, next) => {
+    console.error('[Global Error Handler]', err);
+    const lang = req.header('Accept-Language')?.startsWith('az') ? 'az' : (req.header('Accept-Language')?.startsWith('ru') ? 'ru' : 'en');
+    const status = err.status || 500;
+    const error = ApiError.builder()
+        .code(status === 404 ? 'NOT_FOUND' : 'INTERNAL_SERVER_ERROR')
+        .message(getMessage(status === 404 ? 'error.resource_not_found' : 'error.internal_server_error', lang))
+        .status(status)
+        .path(req.originalUrl)
+        .build();
+    res.status(status).json(ApiResponse.error(error));
 });
 
 console.log(`Starting server on port ${PORT}...`);

@@ -1,0 +1,15 @@
+{
+    "error.unexpected": "An unexpected error occurred. Please try again later.",
+    "error.internal_server_error": "An internal server error occurred. Please contact support.",
+    "error.invalid_json_format": "Invalid request format. Please check the submitted data.",
+    "error.validation": "Input validation failed. Please check the provided information.",
+    "error.resource_not_found": "Resource not found.",
+    "error.access_denied": "Access denied. You do not have permission for this operation.",
+    "error.bad_request": "Bad request.",
+    "error.no_file_uploaded": "No file uploaded.",
+    "error.upload_failed": "File upload failed.",
+    "error.fetch_failed": "Failed to fetch data.",
+    "error.delete_failed": "Deletion failed.",
+    "error.move_failed": "Moving file failed.",
+    "error.stream_failed": "Streaming failed."
+}
