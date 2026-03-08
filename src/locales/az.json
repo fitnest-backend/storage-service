@@ -1,15 +1,15 @@
 {
-    "error.unexpected": "Gözlənilməz bir xəta baş verdi. Zəhmət olmasa yenidən cəhd edin.",
-    "error.internal_server_error": "Daxili server xətası baş verdi. Texniki dəstək ilə əlaqə saxlayın.",
-    "error.invalid_json_format": "Yanlış sorğu formatı. Göndərilən məlumatın formatını yoxlayın.",
+    "error.unexpected": "Gözlənilməz xəta baş verdi. Zəhmət olmasa bir qədər sonra yenidən cəhd edin.",
+    "error.internal_server_error": "Texniki xəta baş verdi. Zəhmət olmasa bir qədər sonra yenidən cəhd edin.",
+    "error.invalid_json_format": "Sorğunun formatı düzgün deyil. Zəhmət olmasa göndərilən məlumatı yoxlayın.",
     "error.validation": "Daxil edilən məlumatlar yanlışdır. Zəhmət olmasa məlumatları yoxlayın.",
-    "error.resource_not_found": "Resurs tapılmadı.",
-    "error.access_denied": "Giriş imtina edildi. Bu əməliyyat üçün icazəniz yoxdur.",
-    "error.bad_request": "Yanlış sorğu.",
-    "error.no_file_uploaded": "Fayl yüklənməyib.",
-    "error.upload_failed": "Faylın yüklənməsi uğursuz oldu.",
-    "error.fetch_failed": "Məlumatların əldə edilməsi uğursuz oldu.",
-    "error.delete_failed": "Silinmə əməliyyatı uğursuz oldu.",
-    "error.move_failed": "Faylın yerinin dəyişdirilməsi uğursuz oldu.",
-    "error.stream_failed": "Axın əməliyyatı uğursuz oldu."
+    "error.resource_not_found": "Sorğu edilən məlumat tapılmadı.",
+    "error.access_denied": "Bu əməliyyat üçün icazəniz yoxdur.",
+    "error.bad_request": "Yanlış sorğu göndərildi.",
+    "error.no_file_uploaded": "Fayl təqdim edilməyib.",
+    "error.upload_failed": "Fayl yüklənməsi mümkün olmadı.",
+    "error.fetch_failed": "Məlumatların əldə edilməsi mümkün olmadı.",
+    "error.delete_failed": "Silinmə əməliyyatı mümkün olmadı.",
+    "error.move_failed": "Faylın yerinin dəyişdirilməsi mümkün olmadı.",
+    "error.stream_failed": "Sorğu emal edilərkən xəta baş verdi."
 }
