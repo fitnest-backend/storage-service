@@ -1,0 +1,42 @@
+# -----------------------------
+# Gradle build and caches
+# -----------------------------
+.gradle/
+build/
+out/
+
+# DO NOT ignore Gradle wrapper!
+# Keep gradle/wrapper/gradle-wrapper.jar in repo
+
+# -----------------------------
+# IDEs
+# -----------------------------
+.idea/
+*.iws
+*.iml
+*.ipr
+.vscode/
+.settings/
+.classpath
+.project
+bin/
+
+# -----------------------------
+# OS files
+# -----------------------------
+.DS_Store
+Thumbs.db
+
+# -----------------------------
+# Logs
+# -----------------------------
+*.log
+
+# -----------------------------
+# Environment and secrets
+# -----------------------------
+.env
+.env.local
+application-local.yml
+application-dev.yml
+application-prod.yml
