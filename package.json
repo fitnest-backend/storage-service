@@ -1,5 +1,5 @@
 {
-  "name": "storage-service",
+  "name": "storage-backend",
   "version": "1.0.0",
   "description": "Standalone worker for file storage integration",
   "main": "server.grpc.js",
