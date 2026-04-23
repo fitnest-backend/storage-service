@@ -18,4 +18,4 @@ RUN mkdir -p temp_uploads
 EXPOSE 9090
 
 # Start the worker
-CMD ["node", "server.grpc.js"]
+CMD ["node", "bootstrap.js"]
