@@ -7,6 +7,7 @@ import config from './src/config/storage.config.js';
 import express from 'express';
 import cors from 'cors';
 import { initRedis } from './src/config/redis.js';
+import 'dotenv/config';
 
 console.log('Loading routes...');
 import uploadRoutes from './src/routes/upload.routes.js';
