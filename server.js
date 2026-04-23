@@ -8,9 +8,6 @@ import express from 'express';
 import cors from 'cors';
 import { initRedis } from './src/config/redis.js';
 import 'dotenv/config';
-import { loadVaultSecrets } from './vault-loader.js';
-
-await loadVaultSecrets();
 
 console.log('Loading routes...');
 import uploadRoutes from './src/routes/upload.routes.js';

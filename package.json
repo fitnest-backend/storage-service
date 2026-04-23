@@ -8,8 +8,8 @@
     "node": ">=18.18.0"
   },
   "scripts": {
-    "start": "node server.grpc.js",
-    "dev": "node server.grpc.js"
+    "start": "node bootstrap.js",
+    "dev": "node bootstrap.js"
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.14.3",
