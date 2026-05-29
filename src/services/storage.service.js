@@ -1,13 +1,36 @@
 import {Storage} from 'megajs';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import config from '../config/storage.config.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const ROOT_DIR = path.join(__dirname, '../../');
+const LOCAL_STORAGE_DIR = path.join(ROOT_DIR, 'local_storage');
+
+function generateTempNodeId() {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let result = 'temp_';
+    for (let i = 0; i < 6; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+}
 
 class StorageService {
     constructor() {
         this.storage = null;
         this.initialized = false;
         this.initializationPromise = this._initialize();
+
+        if (!fs.existsSync(LOCAL_STORAGE_DIR)) {
+            fs.mkdirSync(LOCAL_STORAGE_DIR, { recursive: true });
+        }
+        const metadataPath = path.join(LOCAL_STORAGE_DIR, 'metadata.json');
+        if (!fs.existsSync(metadataPath)) {
+            fs.writeFileSync(metadataPath, JSON.stringify({}), 'utf8');
+        }
     }
 
     static hashNodeId(nodeId) {
@@ -45,67 +68,156 @@ class StorageService {
         }
     }
 
+    getMetadata(fsId) {
+        try {
+            const metadataPath = path.join(LOCAL_STORAGE_DIR, 'metadata.json');
+            if (fs.existsSync(metadataPath)) {
+                const data = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+                return data[fsId];
+            }
+        } catch (e) {
+            console.error('[StorageService] Error reading metadata:', e);
+        }
+        return null;
+    }
+
+    setMetadata(fsId, value) {
+        try {
+            const metadataPath = path.join(LOCAL_STORAGE_DIR, 'metadata.json');
+            let data = {};
+            if (fs.existsSync(metadataPath)) {
+                data = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+            }
+            data[fsId] = value;
+            fs.writeFileSync(metadataPath, JSON.stringify(data, null, 2), 'utf8');
+        } catch (e) {
+            console.error('[StorageService] Error writing metadata:', e);
+        }
+    }
+
+    deleteMetadata(fsId) {
+        try {
+            const metadataPath = path.join(LOCAL_STORAGE_DIR, 'metadata.json');
+            if (fs.existsSync(metadataPath)) {
+                const data = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+                delete data[fsId];
+                fs.writeFileSync(metadataPath, JSON.stringify(data, null, 2), 'utf8');
+            }
+        } catch (e) {
+            console.error('[StorageService] Error deleting metadata:', e);
+        }
+    }
+
+    _extractIdFromUrl(url) {
+        if (!url) return '';
+        if (url.includes('/')) {
+            const parts = url.split('/');
+            return parts[parts.length - 1];
+        }
+        return url;
+    }
+
     async uploadFile(filePath, directory = '/', oldPath = null) {
         await this.ensureInitialized();
         try {
             const fileName = path.basename(filePath);
             const fileSize = fs.statSync(filePath).size;
 
-            console.log(`[StorageService] Uploading ${fileName} to ${directory}...`);
+            const tempNodeId = generateTempNodeId();
+            const tempFsId = StorageService.hashNodeId(tempNodeId);
 
-            // Find or create directory
+            console.log(`[StorageService] Fast-track uploading ${fileName} to local storage with fsId: ${tempFsId}...`);
+
+            if (!fs.existsSync(LOCAL_STORAGE_DIR)) {
+                fs.mkdirSync(LOCAL_STORAGE_DIR, { recursive: true });
+            }
+
+            const localPath = path.join(LOCAL_STORAGE_DIR, String(tempFsId));
+            fs.copyFileSync(filePath, localPath);
+
+            this.setMetadata(tempFsId, {
+                fileName,
+                directory,
+                size: fileSize,
+                status: 'local',
+                localPath: localPath,
+                timestamp: Date.now()
+            });
+
+            // Start background upload to MEGA asynchronously using the safe local path copy
+            this._backgroundUpload(filePath, directory, oldPath, tempFsId, fileName, fileSize, localPath);
+
+            return {
+                success: true,
+                message: 'File uploaded successfully (cached)',
+                fileDetails: {
+                    name: fileName,
+                    size: fileSize,
+                    path: path.join(directory, fileName),
+                    nodeId: tempNodeId
+                }
+            };
+        } catch (error) {
+            console.error('[StorageService] Upload failed:', error.message);
+            return {success: false, message: error.message};
+        }
+    }
+
+    async _backgroundUpload(filePath, directory, oldPath, tempFsId, fileName, fileSize, localPath) {
+        try {
+            console.log(`[StorageService] [Background] Starting MEGA upload for ${fileName} (${tempFsId})...`);
             const targetFolder = await this._getOrCreateFolder(directory);
 
-            // 1. Delete explicit old path if provided
             if (oldPath) {
-                console.log(`[StorageService] Explicit old path provided: ${oldPath}. Deleting...`);
+                console.log(`[StorageService] [Background] Explicit old path provided: ${oldPath}. Deleting...`);
                 try {
                     const oldFile = await this._getFileOrFolder(oldPath);
                     if (oldFile) {
                         await oldFile.delete();
                     }
                 } catch (delErr) {
-                    console.warn(`[StorageService] Failed to delete explicit old path ${oldPath}:`, delErr.message);
+                    console.warn(`[StorageService] [Background] Failed to delete explicit old path ${oldPath}:`, delErr.message);
                 }
             }
 
-            // 2. Fallback: Delete existing file if it exists with the same name in the target folder
             const children = Array.isArray(targetFolder.children) ? targetFolder.children : Object.values(targetFolder.children || {});
             const existingFile = children.find(f => f.name === fileName && !f.directory);
             if (existingFile) {
-                console.log(`[StorageService] Existing file found with same name: ${fileName}. Deleting...`);
+                console.log(`[StorageService] [Background] Existing file found with same name: ${fileName}. Deleting...`);
                 try {
                     await existingFile.delete();
                 } catch (delErr) {
-                    console.warn(`[StorageService] Failed to delete existing same-name file ${fileName}:`, delErr.message);
+                    console.warn(`[StorageService] [Background] Failed to delete existing same-name file ${fileName}:`, delErr.message);
                 }
             }
 
-            console.log(`[StorageService] Starting upload of ${fileName}...`);
-            const fileStream = fs.createReadStream(filePath);
+            console.log(`[StorageService] [Background] Starting actual MEGA pipe for ${fileName}...`);
+            const fileStream = fs.createReadStream(localPath);
             const upload = targetFolder.upload({
                 name: fileName,
                 size: fileSize
             });
 
             fileStream.pipe(upload);
-
             const uploadedFile = await upload.complete;
-            console.log('[StorageService] Upload complete:', uploadedFile.name);
+            console.log('[StorageService] [Background] MEGA upload complete:', uploadedFile.name, 'nodeId:', uploadedFile.nodeId);
 
-            return {
-                success: true,
-                message: 'File uploaded successfully',
-                fileDetails: {
-                    name: uploadedFile.name,
-                    size: uploadedFile.size,
-                    path: path.join(directory, uploadedFile.name),
-                    nodeId: uploadedFile.nodeId
-                }
-            };
+            // Update metadata to uploaded mapping
+            this.setMetadata(tempFsId, {
+                fileName,
+                directory,
+                size: fileSize,
+                status: 'uploaded',
+                realNodeId: uploadedFile.nodeId,
+                timestamp: Date.now()
+            });
+
+            // Cleanup local cached file
+            if (fs.existsSync(localPath)) {
+                fs.unlinkSync(localPath);
+            }
         } catch (error) {
-            console.error('[StorageService] Upload failed:', error.message);
-            return {success: false, message: error.message};
+            console.error('[StorageService] [Background] MEGA upload failed:', error.message);
         }
     }
 
@@ -147,16 +259,52 @@ class StorageService {
         await this.ensureInitialized();
         try {
             console.log(`[StorageService] Deleting paths: ${JSON.stringify(paths)}`);
+            const megaPathsToDelete = [];
+            for (const p of paths) {
+                const id = this._extractIdFromUrl(p);
+
+                // 1. Delete local file if exists
+                const localPath = path.join(LOCAL_STORAGE_DIR, String(id));
+                if (fs.existsSync(localPath)) {
+                    fs.unlinkSync(localPath);
+                }
+
+                // 2. Check metadata mapping
+                const metadata = this.getMetadata(id);
+                if (metadata) {
+                    if (metadata.status === 'uploaded' && metadata.realNodeId) {
+                        megaPathsToDelete.push(metadata.realNodeId);
+                    }
+                    this.deleteMetadata(id);
+                } else {
+                    megaPathsToDelete.push(p);
+                }
+            }
+
+            // 3. Delete from MEGA in background
+            if (megaPathsToDelete.length > 0) {
+                this._backgroundDelete(megaPathsToDelete);
+            }
+
+            return {success: true, message: 'Paths deleted successfully'};
+        } catch (error) {
+            console.error('[StorageService] Delete failed:', error.message);
+            return {success: false, message: error.message};
+        }
+    }
+
+    async _backgroundDelete(paths) {
+        try {
+            console.log(`[StorageService] [Background] Deleting from MEGA: ${JSON.stringify(paths)}`);
             for (const p of paths) {
                 const file = await this._getFileOrFolder(p);
                 if (file) {
                     await file.delete();
                 }
             }
-            return {success: true, message: 'Paths deleted successfully'};
+            console.log(`[StorageService] [Background] MEGA deletion complete`);
         } catch (error) {
-            console.error('[StorageService] Delete failed:', error.message);
-            return {success: false, message: error.message};
+            console.error('[StorageService] [Background] MEGA deletion failed:', error.message);
         }
     }
 
@@ -182,11 +330,25 @@ class StorageService {
     }
 
     async downloadFile(fileId) {
-        // MEGA uses nodeIds. This assumes fileId is the nodeId.
         await this.ensureInitialized();
         try {
             console.log(`[StorageService] Getting download URL for: ${fileId}`);
-            const file = await this._getFileById(fileId);
+            const id = this._extractIdFromUrl(fileId);
+
+            // Wait if currently uploading in background
+            let metadata = this.getMetadata(id);
+            if (metadata && metadata.status === 'local') {
+                console.log(`[StorageService] File ${id} is currently local. Waiting for MEGA upload to complete...`);
+                for (let i = 0; i < 50; i++) { // 10s max wait
+                    await new Promise(resolve => setTimeout(resolve, 200));
+                    metadata = this.getMetadata(id);
+                    if (!metadata || metadata.status === 'uploaded') {
+                        break;
+                    }
+                }
+            }
+
+            const file = await this._getFileById(id);
             if (!file) throw new Error('File not found');
 
             const url = await file.link();
@@ -201,13 +363,30 @@ class StorageService {
         await this.ensureInitialized();
         try {
             console.log(`[StorageService] Getting file stream for: ${fileId}`);
-            const file = await this._getFileById(fileId);
+            const id = this._extractIdFromUrl(fileId);
+            const localPath = path.join(LOCAL_STORAGE_DIR, String(id));
+
+            // 1. If still stored locally, stream directly from disk (fast)
+            if (fs.existsSync(localPath)) {
+                const metadata = this.getMetadata(id);
+                const filename = metadata ? metadata.fileName : 'file';
+                const size = metadata ? metadata.size : fs.statSync(localPath).size;
+                return {
+                    stream: fs.createReadStream(localPath),
+                    contentLength: size,
+                    contentType: 'application/octet-stream',
+                    filename: filename
+                };
+            }
+
+            // 2. Otherwise fall back to streaming from MEGA
+            const file = await this._getFileById(id);
             if (!file) throw new Error('File not found');
 
             return {
                 stream: file.download(),
                 contentLength: file.size,
-                contentType: 'application/octet-stream', // Generic
+                contentType: 'application/octet-stream',
                 filename: file.name
             };
         } catch (error) {
@@ -218,17 +397,21 @@ class StorageService {
 
     async _getFileById(id) {
         await this.ensureInitialized();
-        const idNum = parseInt(id, 10);
+        let targetId = id;
+
+        const metadata = this.getMetadata(id);
+        if (metadata && metadata.status === 'uploaded' && metadata.realNodeId) {
+            targetId = metadata.realNodeId;
+        }
+
+        const idNum = parseInt(targetId, 10);
         for (const f of Object.values(this.storage.files)) {
-            // Check literal nodeId
-            if (f.nodeId === id) return f;
-            // Check hashed fsId
+            if (f.nodeId === targetId) return f;
             if (!isNaN(idNum) && StorageService.hashNodeId(f.nodeId) === idNum) return f;
         }
         return null;
     }
 
-    // Helper to traverse or create folder structure
     async _getOrCreateFolder(folderPath) {
         console.log(`[StorageService] _getOrCreateFolder: ${folderPath}`);
         if (folderPath === '/' || folderPath === '') return this.storage.root;
@@ -237,25 +420,19 @@ class StorageService {
         let current = this.storage.root;
 
         for (const part of parts) {
-            console.log(`[StorageService] Looking for part: ${part} in ${current.name || 'root'}`);
-            // MEGA children might not be a simple array or might need refreshing
             if (!current.children) {
-                console.log(`[StorageService] Folder ${current.name || 'root'} has no children property yet, attempting mkdir anyway or reloading...`);
+                console.log(`[StorageService] Folder has no children property yet...`);
             }
 
             let next = (current.children || []).find(f => f.name === part && f.directory);
 
             if (!next) {
-                console.log(`[StorageService] Part ${part} not found. Creating...`);
                 try {
                     next = await current.mkdir(part);
-                    console.log(`[StorageService] Folder ${part} created successfully.`);
                 } catch (mkdirErr) {
                     console.error(`[StorageService] Error creating folder ${part}:`, mkdirErr.message);
                     throw mkdirErr;
                 }
-            } else {
-                console.log(`[StorageService] Part ${part} found.`);
             }
             current = next;
         }
@@ -272,7 +449,6 @@ class StorageService {
         for (const part of parts) {
             let next = (current.children || []).find(f => f.name === part && f.directory);
             if (!next) {
-                console.log(`[StorageService] Folder part not found: ${part}`);
                 return null;
             }
             current = next;
@@ -283,7 +459,6 @@ class StorageService {
     async _getFileOrFolder(fullPath) {
         if (!fullPath || fullPath === '/' || fullPath === '') return this.storage.root;
 
-        // If it looks like an ID/hash (no slashes), try finding by ID first
         if (!fullPath.includes('/') && fullPath !== '.' && fullPath !== '..') {
             const file = await this._getFileById(fullPath);
             if (file) return file;
