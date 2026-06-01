@@ -9,6 +9,7 @@ import { StorageService } from './src/services/storage.service.js';
 import { initRedis } from './src/config/redis.js';
 import { fileURLToPath } from 'url';
 import 'dotenv/config';
+import './server.js';
 
 // Polyfill for globalThis.crypto if needed
 if (!globalThis.crypto) {

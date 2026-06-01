@@ -16,7 +16,7 @@ const { streamFile } = uploadController;
 console.log('Routes loaded');
 
 const app = express();
-const PORT = config.server.port || 9090;
+const PORT = process.env.HTTP_PORT || 8080;
 
 app.use(cors());
 app.use(express.json());
