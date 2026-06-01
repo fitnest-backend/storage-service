@@ -212,10 +212,8 @@ class StorageService {
                 timestamp: Date.now()
             });
 
-            // Cleanup local cached file
-            if (fs.existsSync(localPath)) {
-                fs.unlinkSync(localPath);
-            }
+            // Keep local cached file on disk for fast streaming
+            console.log(`[StorageService] [Background] Retaining local cached file: ${localPath}`);
         } catch (error) {
             console.error('[StorageService] [Background] MEGA upload failed:', error.message);
         }
@@ -379,12 +377,32 @@ class StorageService {
                 };
             }
 
-            // 2. Otherwise fall back to streaming from MEGA
+            // 2. Otherwise fall back to downloading from MEGA and caching locally
             const file = await this._getFileById(id);
             if (!file) throw new Error('File not found');
 
+            console.log(`[StorageService] File not found locally. Downloading from MEGA to cache: ${id}...`);
+            
+            // Download and save to local disk
+            await new Promise((resolve, reject) => {
+                const megaStream = file.download();
+                const writeStream = fs.createWriteStream(localPath);
+                megaStream.pipe(writeStream);
+                writeStream.on('finish', resolve);
+                writeStream.on('error', (err) => {
+                    fs.unlink(localPath, () => {});
+                    reject(err);
+                });
+                megaStream.on('error', (err) => {
+                    fs.unlink(localPath, () => {});
+                    reject(err);
+                });
+            });
+
+            console.log(`[StorageService] File cached locally: ${id}`);
+
             return {
-                stream: file.download(),
+                stream: fs.createReadStream(localPath),
                 contentLength: file.size,
                 contentType: 'application/octet-stream',
                 filename: file.name
