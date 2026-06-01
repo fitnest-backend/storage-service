@@ -31,6 +31,14 @@ class StorageService {
         if (!fs.existsSync(metadataPath)) {
             fs.writeFileSync(metadataPath, JSON.stringify({}), 'utf8');
         }
+
+        // Cache metadata in-memory at startup to avoid blocking synchronous disk reads
+        try {
+            this.metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+        } catch (e) {
+            console.error('[StorageService] Error loading metadata.json, initializing empty:', e);
+            this.metadata = {};
+        }
     }
 
     static hashNodeId(nodeId) {
@@ -69,42 +77,30 @@ class StorageService {
     }
 
     getMetadata(fsId) {
-        try {
-            const metadataPath = path.join(LOCAL_STORAGE_DIR, 'metadata.json');
-            if (fs.existsSync(metadataPath)) {
-                const data = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
-                return data[fsId];
-            }
-        } catch (e) {
-            console.error('[StorageService] Error reading metadata:', e);
-        }
-        return null;
+        return this.metadata[fsId] || null;
     }
 
     setMetadata(fsId, value) {
         try {
+            this.metadata[fsId] = value;
             const metadataPath = path.join(LOCAL_STORAGE_DIR, 'metadata.json');
-            let data = {};
-            if (fs.existsSync(metadataPath)) {
-                data = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
-            }
-            data[fsId] = value;
-            fs.writeFileSync(metadataPath, JSON.stringify(data, null, 2), 'utf8');
+            fs.writeFile(metadataPath, JSON.stringify(this.metadata, null, 2), 'utf8', (err) => {
+                if (err) console.error('[StorageService] Error writing metadata to disk:', err);
+            });
         } catch (e) {
-            console.error('[StorageService] Error writing metadata:', e);
+            console.error('[StorageService] Error saving metadata in-memory:', e);
         }
     }
 
     deleteMetadata(fsId) {
         try {
+            delete this.metadata[fsId];
             const metadataPath = path.join(LOCAL_STORAGE_DIR, 'metadata.json');
-            if (fs.existsSync(metadataPath)) {
-                const data = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
-                delete data[fsId];
-                fs.writeFileSync(metadataPath, JSON.stringify(data, null, 2), 'utf8');
-            }
+            fs.writeFile(metadataPath, JSON.stringify(this.metadata, null, 2), 'utf8', (err) => {
+                if (err) console.error('[StorageService] Error writing metadata to disk:', err);
+            });
         } catch (e) {
-            console.error('[StorageService] Error deleting metadata:', e);
+            console.error('[StorageService] Error deleting metadata in-memory:', e);
         }
     }
 
@@ -525,6 +521,13 @@ class StorageService {
         });
 
         console.log(`[StorageService] File cached locally: ${id}`);
+        this.setMetadata(id, {
+            fileName: file.name,
+            size: file.size,
+            status: 'uploaded',
+            realNodeId: file.nodeId,
+            timestamp: Date.now()
+        });
         return { localPath, filename: file.name };
     }
 }
