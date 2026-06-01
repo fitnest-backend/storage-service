@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import config from '../config/storage.config.js';
+import { redis } from '../config/redis.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -61,11 +62,43 @@ class StorageService {
             });
 
             await this.storage.ready;
+            await this._loadMetadataFromRedis();
             this.initialized = true;
             console.log('[StorageService] Storage service initialized. User:', this.storage.name);
         } catch (error) {
             console.error('[StorageService] Failed to initialize storage:', error);
             throw error;
+        }
+    }
+
+    async _loadMetadataFromRedis() {
+        try {
+            console.log('[StorageService] Loading metadata from Redis...');
+            this.metadata = {};
+
+            // Try loading from local file first as a fallback
+            const metadataPath = path.join(LOCAL_STORAGE_DIR, 'metadata.json');
+            if (fs.existsSync(metadataPath)) {
+                try {
+                    this.metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+                } catch (e) {
+                    console.error('[StorageService] Failed to parse local metadata.json:', e);
+                }
+            }
+
+            // Sync with Redis keys
+            const keys = await redis.keys('storage:metadata:*');
+            console.log(`[StorageService] Found ${keys.length} metadata keys in Redis`);
+            for (const key of keys) {
+                const fsId = key.substring('storage:metadata:'.length);
+                const val = await redis.get(key);
+                if (val) {
+                    this.metadata[fsId] = JSON.parse(val);
+                }
+            }
+            console.log('[StorageService] Metadata loaded and merged in-memory');
+        } catch (e) {
+            console.error('[StorageService] Error loading metadata from Redis:', e);
         }
     }
 
@@ -80,27 +113,29 @@ class StorageService {
         return this.metadata[fsId] || null;
     }
 
-    setMetadata(fsId, value) {
+    async setMetadata(fsId, value) {
         try {
             this.metadata[fsId] = value;
             const metadataPath = path.join(LOCAL_STORAGE_DIR, 'metadata.json');
             fs.writeFile(metadataPath, JSON.stringify(this.metadata, null, 2), 'utf8', (err) => {
                 if (err) console.error('[StorageService] Error writing metadata to disk:', err);
             });
+            await redis.set(`storage:metadata:${fsId}`, JSON.stringify(value));
         } catch (e) {
-            console.error('[StorageService] Error saving metadata in-memory:', e);
+            console.error('[StorageService] Error saving metadata:', e);
         }
     }
 
-    deleteMetadata(fsId) {
+    async deleteMetadata(fsId) {
         try {
             delete this.metadata[fsId];
             const metadataPath = path.join(LOCAL_STORAGE_DIR, 'metadata.json');
             fs.writeFile(metadataPath, JSON.stringify(this.metadata, null, 2), 'utf8', (err) => {
                 if (err) console.error('[StorageService] Error writing metadata to disk:', err);
             });
+            await redis.del(`storage:metadata:${fsId}`);
         } catch (e) {
-            console.error('[StorageService] Error deleting metadata in-memory:', e);
+            console.error('[StorageService] Error deleting metadata:', e);
         }
     }
 
