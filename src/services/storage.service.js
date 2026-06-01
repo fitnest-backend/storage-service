@@ -491,6 +491,42 @@ class StorageService {
 
         return (folder.children || []).find(f => f.name === fileName);
     }
+
+    async ensureFileCached(fileId) {
+        await this.ensureInitialized();
+        const id = this._extractIdFromUrl(fileId);
+        const localPath = path.join(LOCAL_STORAGE_DIR, String(id));
+
+        // 1. If already on disk, just return path and filename
+        if (fs.existsSync(localPath)) {
+            const metadata = this.getMetadata(id);
+            const filename = metadata ? metadata.fileName : 'file';
+            return { localPath, filename };
+        }
+
+        // 2. Otherwise download and save to disk first
+        const file = await this._getFileById(id);
+        if (!file) throw new Error('File not found');
+
+        console.log(`[StorageService] Downloading from MEGA to cache: ${id}...`);
+        await new Promise((resolve, reject) => {
+            const megaStream = file.download();
+            const writeStream = fs.createWriteStream(localPath);
+            megaStream.pipe(writeStream);
+            writeStream.on('finish', resolve);
+            writeStream.on('error', (err) => {
+                fs.unlink(localPath, () => {});
+                reject(err);
+            });
+            megaStream.on('error', (err) => {
+                fs.unlink(localPath, () => {});
+                reject(err);
+            });
+        });
+
+        console.log(`[StorageService] File cached locally: ${id}`);
+        return { localPath, filename: file.name };
+    }
 }
 
 const instance = new StorageService();

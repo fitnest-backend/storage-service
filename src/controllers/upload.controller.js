@@ -218,25 +218,26 @@ async function streamFile(req, res) {
     const path = req.originalUrl;
     try {
         const fileId = req.params.fileId || req.params.fsId;
-        const { stream, contentLength, contentType, filename } = await storageService.getFileStream(fileId);
+        const { localPath, filename } = await storageService.ensureFileCached(fileId);
 
-        if (contentType) res.setHeader("Content-Type", contentType);
-        if (contentLength) res.setHeader("Content-Length", contentLength);
-        res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
-        res.setHeader("Cache-Control", "public, max-age=3600");
-
-        stream.pipe(res);
-
-        stream.on('error', (err) => {
-            console.error('[UploadController] Stream error:', err);
-            if (!res.headersSent) {
-                const apiError = ApiError.builder()
-                    .code('STREAM_FAILED')
-                    .message(getMessage('error.stream_failed', lang))
-                    .status(500)
-                    .path(path)
-                    .build();
-                res.status(500).json(ApiResponse.error(apiError));
+        res.sendFile(localPath, {
+            maxAge: '31536000000', // 1 year in ms
+            headers: {
+                'Cache-Control': 'public, max-age=31536000, immutable',
+                'Content-Disposition': `inline; filename="${encodeURIComponent(filename)}"`
+            }
+        }, (err) => {
+            if (err) {
+                console.error('[UploadController] SendFile error:', err);
+                if (!res.headersSent) {
+                    const apiError = ApiError.builder()
+                        .code('STREAM_FAILED')
+                        .message(getMessage('error.stream_failed', lang))
+                        .status(500)
+                        .path(path)
+                        .build();
+                    res.status(500).json(ApiResponse.error(apiError));
+                }
             }
         });
     } catch (e) {
