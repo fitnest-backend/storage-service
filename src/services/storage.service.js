@@ -395,52 +395,98 @@ class StorageService {
             const id = this._extractIdFromUrl(fileId);
             const localPath = path.join(LOCAL_STORAGE_DIR, String(id));
 
-            // 1. If still stored locally, stream directly from disk (fast)
-            if (fs.existsSync(localPath)) {
-                const metadata = this.getMetadata(id);
-                const filename = metadata ? metadata.fileName : 'file';
-                const size = metadata ? metadata.size : fs.statSync(localPath).size;
+            // 1. If not stored locally, download from MEGA first
+            if (!fs.existsSync(localPath)) {
+                const file = await this._getFileById(id);
+                if (!file) throw new Error('File not found');
+
+                console.log(`[StorageService] File not found locally. Downloading from MEGA to cache: ${id}...`);
+                
+                await new Promise((resolve, reject) => {
+                    const megaStream = file.download();
+                    const writeStream = fs.createWriteStream(localPath);
+                    megaStream.pipe(writeStream);
+                    writeStream.on('finish', resolve);
+                    writeStream.on('error', (err) => {
+                        fs.unlink(localPath, () => {});
+                        reject(err);
+                    });
+                    megaStream.on('error', (err) => {
+                        fs.unlink(localPath, () => {});
+                        reject(err);
+                    });
+                });
+
+                console.log(`[StorageService] File cached locally: ${id}`);
+                this.setMetadata(id, {
+                    fileName: file.name,
+                    size: file.size,
+                    status: 'uploaded',
+                    realNodeId: file.nodeId,
+                    timestamp: Date.now()
+                });
+            }
+
+            const metadata = this.getMetadata(id);
+            const filename = metadata ? metadata.fileName : 'file';
+
+            // 2. Check and handle SVG to PNG conversion for mobile compatibility
+            const pngPath = await this._ensurePngVersion(localPath, filename);
+            if (pngPath) {
+                const pngSize = fs.statSync(pngPath).size;
+                const pngFilename = filename.substring(0, filename.length - 4) + '.png';
                 return {
-                    stream: fs.createReadStream(localPath),
-                    contentLength: size,
-                    contentType: 'application/octet-stream',
-                    filename: filename
+                    stream: fs.createReadStream(pngPath),
+                    contentLength: pngSize,
+                    contentType: 'image/png',
+                    filename: pngFilename
                 };
             }
 
-            // 2. Otherwise fall back to downloading from MEGA and caching locally
-            const file = await this._getFileById(id);
-            if (!file) throw new Error('File not found');
-
-            console.log(`[StorageService] File not found locally. Downloading from MEGA to cache: ${id}...`);
-            
-            // Download and save to local disk
-            await new Promise((resolve, reject) => {
-                const megaStream = file.download();
-                const writeStream = fs.createWriteStream(localPath);
-                megaStream.pipe(writeStream);
-                writeStream.on('finish', resolve);
-                writeStream.on('error', (err) => {
-                    fs.unlink(localPath, () => {});
-                    reject(err);
-                });
-                megaStream.on('error', (err) => {
-                    fs.unlink(localPath, () => {});
-                    reject(err);
-                });
-            });
-
-            console.log(`[StorageService] File cached locally: ${id}`);
+            const size = metadata ? metadata.size : fs.statSync(localPath).size;
+            let contentType = 'application/octet-stream';
+            const lowerFilename = filename.toLowerCase();
+            if (lowerFilename.endsWith('.svg')) {
+                contentType = 'image/svg+xml';
+            } else if (lowerFilename.endsWith('.png')) {
+                contentType = 'image/png';
+            } else if (lowerFilename.endsWith('.jpg') || lowerFilename.endsWith('.jpeg')) {
+                contentType = 'image/jpeg';
+            } else if (lowerFilename.endsWith('.gif')) {
+                contentType = 'image/gif';
+            }
 
             return {
                 stream: fs.createReadStream(localPath),
-                contentLength: file.size,
-                contentType: 'application/octet-stream',
-                filename: file.name
+                contentLength: size,
+                contentType: contentType,
+                filename: filename
             };
         } catch (error) {
             console.error('[StorageService] Get file stream failed:', error.message);
             throw error;
+        }
+    }
+
+    async _ensurePngVersion(localPath, filename) {
+        if (!filename.toLowerCase().endsWith('.svg')) {
+            return null;
+        }
+        const pngCachePath = localPath + '.png';
+        if (fs.existsSync(pngCachePath)) {
+            return pngCachePath;
+        }
+        try {
+            console.log(`[StorageService] Converting SVG to PNG: ${filename}...`);
+            const { default: sharp } = await import('sharp');
+            const svgBuffer = fs.readFileSync(localPath);
+            const pngBuffer = await sharp(svgBuffer).png().toBuffer();
+            fs.writeFileSync(pngCachePath, pngBuffer);
+            console.log(`[StorageService] SVG to PNG conversion complete: ${pngCachePath}`);
+            return pngCachePath;
+        } catch (err) {
+            console.error(`[StorageService] SVG to PNG conversion failed:`, err.message);
+            return null;
         }
     }
 
@@ -528,42 +574,47 @@ class StorageService {
         const id = this._extractIdFromUrl(fileId);
         const localPath = path.join(LOCAL_STORAGE_DIR, String(id));
 
-        // 1. If already on disk, just return path and filename
-        if (fs.existsSync(localPath)) {
-            const metadata = this.getMetadata(id);
-            const filename = metadata ? metadata.fileName : 'file';
-            return { localPath, filename };
+        // 1. If not on disk, download it first
+        if (!fs.existsSync(localPath)) {
+            const file = await this._getFileById(id);
+            if (!file) throw new Error('File not found');
+
+            console.log(`[StorageService] Downloading from MEGA to cache: ${id}...`);
+            await new Promise((resolve, reject) => {
+                const megaStream = file.download();
+                const writeStream = fs.createWriteStream(localPath);
+                megaStream.pipe(writeStream);
+                writeStream.on('finish', resolve);
+                writeStream.on('error', (err) => {
+                    fs.unlink(localPath, () => {});
+                    reject(err);
+                });
+                megaStream.on('error', (err) => {
+                    fs.unlink(localPath, () => {});
+                    reject(err);
+                });
+            });
+
+            console.log(`[StorageService] File cached locally: ${id}`);
+            this.setMetadata(id, {
+                fileName: file.name,
+                size: file.size,
+                status: 'uploaded',
+                realNodeId: file.nodeId,
+                timestamp: Date.now()
+            });
         }
 
-        // 2. Otherwise download and save to disk first
-        const file = await this._getFileById(id);
-        if (!file) throw new Error('File not found');
+        const metadata = this.getMetadata(id);
+        const filename = metadata ? metadata.fileName : 'file';
 
-        console.log(`[StorageService] Downloading from MEGA to cache: ${id}...`);
-        await new Promise((resolve, reject) => {
-            const megaStream = file.download();
-            const writeStream = fs.createWriteStream(localPath);
-            megaStream.pipe(writeStream);
-            writeStream.on('finish', resolve);
-            writeStream.on('error', (err) => {
-                fs.unlink(localPath, () => {});
-                reject(err);
-            });
-            megaStream.on('error', (err) => {
-                fs.unlink(localPath, () => {});
-                reject(err);
-            });
-        });
+        const pngPath = await this._ensurePngVersion(localPath, filename);
+        if (pngPath) {
+            const pngFilename = filename.substring(0, filename.length - 4) + '.png';
+            return { localPath: pngPath, filename: pngFilename };
+        }
 
-        console.log(`[StorageService] File cached locally: ${id}`);
-        this.setMetadata(id, {
-            fileName: file.name,
-            size: file.size,
-            status: 'uploaded',
-            realNodeId: file.nodeId,
-            timestamp: Date.now()
-        });
-        return { localPath, filename: file.name };
+        return { localPath, filename };
     }
 }
 
