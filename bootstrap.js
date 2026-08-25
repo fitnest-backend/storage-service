@@ -1,3 +1,11 @@
+import crypto from 'node:crypto';
+if (!globalThis.crypto) {
+    globalThis.crypto = crypto.webcrypto || crypto;
+}
+if (!globalThis.crypto.randomUUID && crypto.randomUUID) {
+    globalThis.crypto.randomUUID = crypto.randomUUID.bind(crypto);
+}
+
 import { loadVaultSecrets } from './vault-loader.js';
 import 'dotenv/config';
 

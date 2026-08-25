@@ -1,10 +1,17 @@
+import crypto from 'node:crypto';
+if (!globalThis.crypto) {
+    globalThis.crypto = crypto.webcrypto || crypto;
+}
+if (!globalThis.crypto.randomUUID && crypto.randomUUID) {
+    globalThis.crypto.randomUUID = crypto.randomUUID.bind(crypto);
+}
+
 import { BlobServiceClient } from '@azure/storage-blob';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import config from '../config/storage.config.js';
 import { redis } from '../config/redis.js';
-import crypto from 'crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
