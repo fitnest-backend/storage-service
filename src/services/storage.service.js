@@ -1,9 +1,10 @@
-import {Storage} from 'megajs';
+import { BlobServiceClient } from '@azure/storage-blob';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import config from '../config/storage.config.js';
 import { redis } from '../config/redis.js';
+import crypto from 'crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -21,7 +22,7 @@ function generateTempNodeId() {
 
 class StorageService {
     constructor() {
-        this.storage = null;
+        this.containerClient = null;
         this.initialized = false;
         this.initializationPromise = this._initialize();
 
@@ -54,17 +55,16 @@ class StorageService {
     async _initialize() {
         if (this.initialized) return;
         try {
-            console.log('[StorageService] Initializing storage...');
-            this.storage = new Storage({
-                email: config.credentials.email,
-                password: config.credentials.password,
-                autologin: true
-            });
+            console.log('[StorageService] Initializing Azure Blob Storage...');
+            const blobServiceClient = BlobServiceClient.fromConnectionString(config.azure.connectionString);
+            this.containerClient = blobServiceClient.getContainerClient(config.azure.containerName);
 
-            await this.storage.ready;
+            // Ensure container exists
+            await this.containerClient.createIfNotExists();
+
             await this._loadMetadataFromRedis();
             this.initialized = true;
-            console.log('[StorageService] Storage service initialized. User:', this.storage.name);
+            console.log('[StorageService] Azure Blob Storage initialized. Container:', config.azure.containerName);
         } catch (error) {
             console.error('[StorageService] Failed to initialize storage:', error);
             throw error;
@@ -105,7 +105,7 @@ class StorageService {
     async ensureInitialized() {
         await this.initializationPromise;
         if (!this.initialized) {
-            throw new Error('StorageService not initialized. Check credentials or network.');
+            throw new Error('StorageService not initialized. Check Azure credentials or network.');
         }
     }
 
@@ -148,6 +148,16 @@ class StorageService {
         return url;
     }
 
+    _getContentType(filename) {
+        const lower = (filename || '').toLowerCase();
+        if (lower.endsWith('.svg')) return 'image/svg+xml';
+        if (lower.endsWith('.png')) return 'image/png';
+        if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+        if (lower.endsWith('.webp')) return 'image/webp';
+        if (lower.endsWith('.gif')) return 'image/gif';
+        return 'application/octet-stream';
+    }
+
     async uploadFile(filePath, directory = '/', oldPath = null) {
         await this.ensureInitialized();
         try {
@@ -157,30 +167,54 @@ class StorageService {
             const tempNodeId = generateTempNodeId();
             const tempFsId = StorageService.hashNodeId(tempNodeId);
 
-            console.log(`[StorageService] Fast-track uploading ${fileName} to local storage with fsId: ${tempFsId}...`);
+            console.log(`[StorageService] Uploading ${fileName} to Azure Blob with fsId: ${tempFsId}...`);
 
             if (!fs.existsSync(LOCAL_STORAGE_DIR)) {
                 fs.mkdirSync(LOCAL_STORAGE_DIR, { recursive: true });
             }
 
+            // Save to local cache
             const localPath = path.join(LOCAL_STORAGE_DIR, String(tempFsId));
             fs.copyFileSync(filePath, localPath);
+
+            // Upload to Azure Blob Storage
+            const blockBlobClient = this.containerClient.getBlockBlobClient(String(tempFsId));
+            const contentType = this._getContentType(fileName);
+            await blockBlobClient.uploadFile(localPath, {
+                blobHTTPHeaders: { blobContentType: contentType },
+                metadata: {
+                    filename: encodeURIComponent(fileName),
+                    directory: encodeURIComponent(directory),
+                    hashid: String(tempFsId)
+                }
+            });
+
+            console.log(`[StorageService] File uploaded to Azure Blob: ${tempFsId}`);
 
             this.setMetadata(tempFsId, {
                 fileName,
                 directory,
                 size: fileSize,
-                status: 'local',
-                localPath: localPath,
+                status: 'uploaded',
                 timestamp: Date.now()
             });
 
-            // Start background upload to MEGA asynchronously using the safe local path copy
-            this._backgroundUpload(filePath, directory, oldPath, tempFsId, fileName, fileSize, localPath);
+            // Delete old file if specified
+            if (oldPath) {
+                console.log(`[StorageService] Deleting old path: ${oldPath}`);
+                try {
+                    const oldId = this._extractIdFromUrl(oldPath);
+                    await this.containerClient.getBlockBlobClient(String(oldId)).deleteIfExists();
+                    const oldLocalPath = path.join(LOCAL_STORAGE_DIR, String(oldId));
+                    if (fs.existsSync(oldLocalPath)) fs.unlinkSync(oldLocalPath);
+                } catch (delErr) {
+                    console.warn(`[StorageService] Failed to delete old path ${oldPath}:`, delErr.message);
+                }
+            }
 
             return {
                 success: true,
-                message: 'File uploaded successfully (cached)',
+                message: 'File uploaded successfully',
                 fileDetails: {
                     name: fileName,
                     size: fileSize,
@@ -194,89 +228,31 @@ class StorageService {
         }
     }
 
-    async _backgroundUpload(filePath, directory, oldPath, tempFsId, fileName, fileSize, localPath) {
-        try {
-            console.log(`[StorageService] [Background] Starting MEGA upload for ${fileName} (${tempFsId})...`);
-            const targetFolder = await this._getOrCreateFolder(directory);
-
-            if (oldPath) {
-                console.log(`[StorageService] [Background] Explicit old path provided: ${oldPath}. Deleting...`);
-                try {
-                    const oldFile = await this._getFileOrFolder(oldPath);
-                    if (oldFile) {
-                        await oldFile.delete();
-                    }
-                } catch (delErr) {
-                    console.warn(`[StorageService] [Background] Failed to delete explicit old path ${oldPath}:`, delErr.message);
-                }
-            }
-
-            const children = Array.isArray(targetFolder.children) ? targetFolder.children : Object.values(targetFolder.children || {});
-            const existingFile = children.find(f => f.name === fileName && !f.directory);
-            if (existingFile) {
-                console.log(`[StorageService] [Background] Existing file found with same name: ${fileName}. Deleting...`);
-                try {
-                    await existingFile.delete();
-                } catch (delErr) {
-                    console.warn(`[StorageService] [Background] Failed to delete existing same-name file ${fileName}:`, delErr.message);
-                }
-            }
-
-            console.log(`[StorageService] [Background] Starting actual MEGA pipe for ${fileName}...`);
-            const fileStream = fs.createReadStream(localPath);
-            const upload = targetFolder.upload({
-                name: fileName,
-                size: fileSize
-            });
-
-            fileStream.pipe(upload);
-            const uploadedFile = await upload.complete;
-            console.log('[StorageService] [Background] MEGA upload complete:', uploadedFile.name, 'nodeId:', uploadedFile.nodeId);
-
-            // Update metadata to uploaded mapping
-            this.setMetadata(tempFsId, {
-                fileName,
-                directory,
-                size: fileSize,
-                status: 'uploaded',
-                realNodeId: uploadedFile.nodeId,
-                timestamp: Date.now()
-            });
-
-            // Keep local cached file on disk for fast streaming
-            console.log(`[StorageService] [Background] Retaining local cached file: ${localPath}`);
-        } catch (error) {
-            console.error('[StorageService] [Background] MEGA upload failed:', error.message);
-        }
-    }
-
     async createDirectory(directoryPath) {
-        await this.ensureInitialized();
-        try {
-            console.log(`[StorageService] Creating directory: ${directoryPath}`);
-            await this._getOrCreateFolder(directoryPath);
-            return {success: true, message: 'Directory created or already exists'};
-        } catch (error) {
-            console.error('[StorageService] Create directory failed:', error.message);
-            return {success: false, message: error.message};
-        }
+        // Azure Blob Storage uses flat namespace; directories are virtual via blob name prefixes.
+        // No-op but return success for API compatibility.
+        return {success: true, message: 'Directory created or already exists'};
     }
 
     async fetchFileList(directory = '/') {
         await this.ensureInitialized();
         try {
             console.log(`[StorageService] Fetching file list for: ${directory}`);
-            const folder = await this._getFolder(directory);
-            if (!folder) throw new Error('Directory not found');
-
-            const list = Object.values(folder.children || []).map(file => ({
-                name: file.name,
-                size: file.size,
-                directory: file.directory,
-                timestamp: file.timestamp,
-                nodeId: file.nodeId
-            }));
-
+            const list = [];
+            for await (const blob of this.containerClient.listBlobsFlat({ includeMetadata: true })) {
+                if (blob.name === 'manifest.json') continue;
+                const meta = blob.metadata || {};
+                const blobDir = meta.directory ? decodeURIComponent(meta.directory) : '/';
+                if (directory === '/' || blobDir === directory) {
+                    list.push({
+                        name: meta.filename ? decodeURIComponent(meta.filename) : blob.name,
+                        size: blob.properties.contentLength,
+                        directory: false,
+                        timestamp: blob.properties.lastModified,
+                        nodeId: blob.name
+                    });
+                }
+            }
             return {success: true, data: {list}};
         } catch (error) {
             console.error('[StorageService] Fetch file list failed:', error.message);
@@ -288,7 +264,6 @@ class StorageService {
         await this.ensureInitialized();
         try {
             console.log(`[StorageService] Deleting paths: ${JSON.stringify(paths)}`);
-            const megaPathsToDelete = [];
             for (const p of paths) {
                 const id = this._extractIdFromUrl(p);
 
@@ -297,22 +272,20 @@ class StorageService {
                 if (fs.existsSync(localPath)) {
                     fs.unlinkSync(localPath);
                 }
-
-                // 2. Check metadata mapping
-                const metadata = this.getMetadata(id);
-                if (metadata) {
-                    if (metadata.status === 'uploaded' && metadata.realNodeId) {
-                        megaPathsToDelete.push(metadata.realNodeId);
-                    }
-                    this.deleteMetadata(id);
-                } else {
-                    megaPathsToDelete.push(p);
+                // Also delete any .png conversion cache
+                if (fs.existsSync(localPath + '.png')) {
+                    fs.unlinkSync(localPath + '.png');
                 }
-            }
 
-            // 3. Delete from MEGA in background
-            if (megaPathsToDelete.length > 0) {
-                this._backgroundDelete(megaPathsToDelete);
+                // 2. Delete from Azure Blob
+                try {
+                    await this.containerClient.getBlockBlobClient(String(id)).deleteIfExists();
+                } catch (blobErr) {
+                    console.warn(`[StorageService] Failed to delete blob ${id}:`, blobErr.message);
+                }
+
+                // 3. Clean up metadata
+                this.deleteMetadata(id);
             }
 
             return {success: true, message: 'Paths deleted successfully'};
@@ -322,33 +295,28 @@ class StorageService {
         }
     }
 
-    async _backgroundDelete(paths) {
-        try {
-            console.log(`[StorageService] [Background] Deleting from MEGA: ${JSON.stringify(paths)}`);
-            for (const p of paths) {
-                const file = await this._getFileOrFolder(p);
-                if (file) {
-                    await file.delete();
-                }
-            }
-            console.log(`[StorageService] [Background] MEGA deletion complete`);
-        } catch (error) {
-            console.error('[StorageService] [Background] MEGA deletion failed:', error.message);
-        }
-    }
-
     async moveFiles(fileList) {
         await this.ensureInitialized();
         try {
             console.log(`[StorageService] Moving files: ${JSON.stringify(fileList)}`);
             for (const item of fileList) {
-                const file = await this._getFileOrFolder(item.path);
-                const destFolder = await this._getOrCreateFolder(item.dest);
-                if (file && destFolder) {
-                    await file.moveTo(destFolder);
-                    if (item.newname) {
-                        await file.rename(item.newname);
-                    }
+                const id = this._extractIdFromUrl(item.path);
+                const metadata = this.getMetadata(id);
+                if (metadata) {
+                    metadata.directory = item.dest;
+                    if (item.newname) metadata.fileName = item.newname;
+                    this.setMetadata(id, metadata);
+                }
+                // Update blob metadata in Azure
+                try {
+                    const blobClient = this.containerClient.getBlockBlobClient(String(id));
+                    const props = await blobClient.getProperties();
+                    const newMeta = { ...props.metadata };
+                    newMeta.directory = encodeURIComponent(item.dest);
+                    if (item.newname) newMeta.filename = encodeURIComponent(item.newname);
+                    await blobClient.setMetadata(newMeta);
+                } catch (blobErr) {
+                    console.warn(`[StorageService] Failed to update blob metadata for ${id}:`, blobErr.message);
                 }
             }
             return {success: true, message: 'Files moved successfully'};
@@ -364,23 +332,30 @@ class StorageService {
             console.log(`[StorageService] Getting download URL for: ${fileId}`);
             const id = this._extractIdFromUrl(fileId);
 
-            // Wait if currently uploading in background
-            let metadata = this.getMetadata(id);
-            if (metadata && metadata.status === 'local') {
-                console.log(`[StorageService] File ${id} is currently local. Waiting for MEGA upload to complete...`);
-                for (let i = 0; i < 50; i++) { // 10s max wait
-                    await new Promise(resolve => setTimeout(resolve, 200));
-                    metadata = this.getMetadata(id);
-                    if (!metadata || metadata.status === 'uploaded') {
-                        break;
-                    }
-                }
-            }
+            const blobClient = this.containerClient.getBlockBlobClient(String(id));
+            const exists = await blobClient.exists();
+            if (!exists) throw new Error('File not found');
 
-            const file = await this._getFileById(id);
-            if (!file) throw new Error('File not found');
+            // Generate a SAS URL for download (valid for 1 hour)
+            const { generateBlobSASQueryParameters, BlobSASPermissions, StorageSharedKeyCredential } = await import('@azure/storage-blob');
 
-            const url = await file.link();
+            // Parse connection string to get account name and key
+            const connParts = {};
+            config.azure.connectionString.split(';').forEach(part => {
+                const [key, ...val] = part.split('=');
+                connParts[key] = val.join('=');
+            });
+
+            const sharedKeyCredential = new StorageSharedKeyCredential(connParts.AccountName, connParts.AccountKey);
+            const sasToken = generateBlobSASQueryParameters({
+                containerName: config.azure.containerName,
+                blobName: String(id),
+                permissions: BlobSASPermissions.parse('r'),
+                startsOn: new Date(),
+                expiresOn: new Date(Date.now() + 3600 * 1000)
+            }, sharedKeyCredential).toString();
+
+            const url = `${blobClient.url}?${sasToken}`;
             return {success: true, dlink: url};
         } catch (error) {
             console.error('[StorageService] Download URL retrieval failed:', error.message);
@@ -395,36 +370,26 @@ class StorageService {
             const id = this._extractIdFromUrl(fileId);
             const localPath = path.join(LOCAL_STORAGE_DIR, String(id));
 
-            // 1. If not stored locally, download from MEGA first
+            // 1. If not stored locally, download from Azure Blob first
             if (!fs.existsSync(localPath)) {
-                const file = await this._getFileById(id);
-                if (!file) throw new Error('File not found');
+                const blobClient = this.containerClient.getBlockBlobClient(String(id));
+                const exists = await blobClient.exists();
+                if (!exists) throw new Error('File not found');
 
-                console.log(`[StorageService] File not found locally. Downloading from MEGA to cache: ${id}...`);
-                
-                await new Promise((resolve, reject) => {
-                    const megaStream = file.download();
-                    const writeStream = fs.createWriteStream(localPath);
-                    megaStream.pipe(writeStream);
-                    writeStream.on('finish', resolve);
-                    writeStream.on('error', (err) => {
-                        fs.unlink(localPath, () => {});
-                        reject(err);
-                    });
-                    megaStream.on('error', (err) => {
-                        fs.unlink(localPath, () => {});
-                        reject(err);
-                    });
+                console.log(`[StorageService] File not found locally. Downloading from Azure Blob to cache: ${id}...`);
+                await blobClient.downloadToFile(localPath);
+
+                // Fetch blob properties for metadata
+                const props = await blobClient.getProperties();
+                const blobMeta = props.metadata || {};
+                this.setMetadata(id, {
+                    fileName: blobMeta.filename ? decodeURIComponent(blobMeta.filename) : 'file',
+                    size: props.contentLength,
+                    status: 'uploaded',
+                    timestamp: Date.now()
                 });
 
                 console.log(`[StorageService] File cached locally: ${id}`);
-                this.setMetadata(id, {
-                    fileName: file.name,
-                    size: file.size,
-                    status: 'uploaded',
-                    realNodeId: file.nodeId,
-                    timestamp: Date.now()
-                });
             }
 
             const metadata = this.getMetadata(id);
@@ -490,119 +455,30 @@ class StorageService {
         }
     }
 
-    async _getFileById(id) {
-        await this.ensureInitialized();
-        let targetId = id;
-
-        const metadata = this.getMetadata(id);
-        if (metadata && metadata.status === 'uploaded' && metadata.realNodeId) {
-            targetId = metadata.realNodeId;
-        }
-
-        const idNum = parseInt(targetId, 10);
-        for (const f of Object.values(this.storage.files)) {
-            if (f.nodeId === targetId) return f;
-            if (!isNaN(idNum) && StorageService.hashNodeId(f.nodeId) === idNum) return f;
-        }
-        return null;
-    }
-
-    async _getOrCreateFolder(folderPath) {
-        console.log(`[StorageService] _getOrCreateFolder: ${folderPath}`);
-        if (folderPath === '/' || folderPath === '') return this.storage.root;
-
-        const parts = folderPath.split('/').filter(p => p);
-        let current = this.storage.root;
-
-        for (const part of parts) {
-            if (!current.children) {
-                console.log(`[StorageService] Folder has no children property yet...`);
-            }
-
-            let next = (current.children || []).find(f => f.name === part && f.directory);
-
-            if (!next) {
-                try {
-                    next = await current.mkdir(part);
-                } catch (mkdirErr) {
-                    console.error(`[StorageService] Error creating folder ${part}:`, mkdirErr.message);
-                    throw mkdirErr;
-                }
-            }
-            current = next;
-        }
-        return current;
-    }
-
-    async _getFolder(folderPath) {
-        console.log(`[StorageService] _getFolder: ${folderPath}`);
-        if (folderPath === '/' || folderPath === '') return this.storage.root;
-
-        const parts = folderPath.split('/').filter(p => p);
-        let current = this.storage.root;
-
-        for (const part of parts) {
-            let next = (current.children || []).find(f => f.name === part && f.directory);
-            if (!next) {
-                return null;
-            }
-            current = next;
-        }
-        return current;
-    }
-
-    async _getFileOrFolder(fullPath) {
-        if (!fullPath || fullPath === '/' || fullPath === '') return this.storage.root;
-
-        if (!fullPath.includes('/') && fullPath !== '.' && fullPath !== '..') {
-            const file = await this._getFileById(fullPath);
-            if (file) return file;
-        }
-
-        const parts = fullPath.split('/').filter(p => p);
-        const fileName = parts.pop();
-        const folderPath = parts.join('/');
-
-        const folder = await this._getFolder(folderPath);
-        if (!folder) return null;
-
-        return (folder.children || []).find(f => f.name === fileName);
-    }
-
     async ensureFileCached(fileId) {
         await this.ensureInitialized();
         const id = this._extractIdFromUrl(fileId);
         const localPath = path.join(LOCAL_STORAGE_DIR, String(id));
 
-        // 1. If not on disk, download it first
+        // 1. If not on disk, download from Azure Blob first
         if (!fs.existsSync(localPath)) {
-            const file = await this._getFileById(id);
-            if (!file) throw new Error('File not found');
+            const blobClient = this.containerClient.getBlockBlobClient(String(id));
+            const exists = await blobClient.exists();
+            if (!exists) throw new Error('File not found');
 
-            console.log(`[StorageService] Downloading from MEGA to cache: ${id}...`);
-            await new Promise((resolve, reject) => {
-                const megaStream = file.download();
-                const writeStream = fs.createWriteStream(localPath);
-                megaStream.pipe(writeStream);
-                writeStream.on('finish', resolve);
-                writeStream.on('error', (err) => {
-                    fs.unlink(localPath, () => {});
-                    reject(err);
-                });
-                megaStream.on('error', (err) => {
-                    fs.unlink(localPath, () => {});
-                    reject(err);
-                });
+            console.log(`[StorageService] Downloading from Azure Blob to cache: ${id}...`);
+            await blobClient.downloadToFile(localPath);
+
+            const props = await blobClient.getProperties();
+            const blobMeta = props.metadata || {};
+            this.setMetadata(id, {
+                fileName: blobMeta.filename ? decodeURIComponent(blobMeta.filename) : 'file',
+                size: props.contentLength,
+                status: 'uploaded',
+                timestamp: Date.now()
             });
 
             console.log(`[StorageService] File cached locally: ${id}`);
-            this.setMetadata(id, {
-                fileName: file.name,
-                size: file.size,
-                status: 'uploaded',
-                realNodeId: file.nodeId,
-                timestamp: Date.now()
-            });
         }
 
         const metadata = this.getMetadata(id);

@@ -12,6 +12,7 @@
     "dev": "node bootstrap.js"
   },
   "dependencies": {
+    "@azure/storage-blob": "^12.33.0",
     "@grpc/grpc-js": "^1.14.3",
     "@grpc/proto-loader": "^0.8.0",
     "axios": "^1.13.6",
