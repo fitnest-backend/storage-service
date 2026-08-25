@@ -216,8 +216,8 @@ async function moveFile(req, res) {
 async function streamFile(req, res) {
     const lang = getLang(req);
     const path = req.originalUrl;
+    const fileId = req.params.fileId || req.params.fsId;
     try {
-        const fileId = req.params.fileId || req.params.fsId;
         const { localPath, filename } = await storageService.ensureFileCached(fileId);
 
         res.sendFile(localPath, {
@@ -228,7 +228,7 @@ async function streamFile(req, res) {
             }
         }, (err) => {
             if (err) {
-                console.error('[UploadController] SendFile error:', err);
+                console.error(`[UploadController] SendFile error for fileId ${fileId} (${path}):`, err);
                 if (!res.headersSent) {
                     const apiError = ApiError.builder()
                         .code('STREAM_FAILED')
@@ -240,17 +240,15 @@ async function streamFile(req, res) {
                 }
             }
         });
-    } catch (e) {
-        console.error('[UploadController] Stream failed:', e);
-        if (!res.headersSent) {
-            const apiError = ApiError.builder()
-                .code('STREAM_FAILED')
-                .message(getMessage('error.stream_failed', lang))
-                .status(500)
-                .path(path)
-                .build();
-            res.status(500).json(ApiResponse.error(apiError));
-        }
+    } catch (error) {
+        console.error(`[UploadController] Stream failed for fileId '${fileId}' (url: ${path}):`, error.message || error);
+        const apiError = ApiError.builder()
+            .code('FILE_NOT_FOUND')
+            .message(getMessage('error.file_not_found', lang))
+            .status(404)
+            .path(path)
+            .build();
+        res.status(404).json(ApiResponse.error(apiError));
     }
 }
 
