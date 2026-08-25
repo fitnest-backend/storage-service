@@ -370,36 +370,75 @@ class StorageService {
         }
     }
 
+    async _resolveBlobName(fileId) {
+        const id = String(this._extractIdFromUrl(fileId));
+        
+        // 1. Direct match check: does blob exist with this id?
+        const directClient = this.containerClient.getBlockBlobClient(id);
+        if (await directClient.exists()) {
+            return { blobName: id, metadata: this.getMetadata(id) };
+        }
+
+        // 2. Check metadata in-memory / Redis for realNodeId mapping
+        let meta = this.getMetadata(id);
+        if (!meta) {
+            // Try fetching from Redis directly if not cached in-memory
+            try {
+                const val = await redis.get(`storage:metadata:${id}`);
+                if (val) {
+                    meta = JSON.parse(val);
+                    this.metadata[id] = meta;
+                }
+            } catch (e) {}
+        }
+
+        if (meta && meta.realNodeId) {
+            const realHash = String(StorageService.hashNodeId(meta.realNodeId));
+            const realClient = this.containerClient.getBlockBlobClient(realHash);
+            if (await realClient.exists()) {
+                console.log(`[StorageService] Resolved ${id} -> realHash ${realHash} (nodeId: ${meta.realNodeId})`);
+                return { blobName: realHash, metadata: meta };
+            }
+        }
+
+        return { blobName: id, metadata: meta };
+    }
+
     async getFileStream(fileId) {
         await this.ensureInitialized();
         try {
             console.log(`[StorageService] Getting file stream for: ${fileId}`);
             const id = this._extractIdFromUrl(fileId);
-            const localPath = path.join(LOCAL_STORAGE_DIR, String(id));
+            const { blobName, metadata: mappedMeta } = await this._resolveBlobName(id);
+            const localPath = path.join(LOCAL_STORAGE_DIR, String(blobName));
 
             // 1. If not stored locally, download from Azure Blob first
             if (!fs.existsSync(localPath)) {
-                const blobClient = this.containerClient.getBlockBlobClient(String(id));
+                const blobClient = this.containerClient.getBlockBlobClient(String(blobName));
                 const exists = await blobClient.exists();
                 if (!exists) throw new Error('File not found');
 
-                console.log(`[StorageService] File not found locally. Downloading from Azure Blob to cache: ${id}...`);
+                console.log(`[StorageService] File not found locally. Downloading from Azure Blob to cache: ${blobName}...`);
                 await blobClient.downloadToFile(localPath);
 
                 // Fetch blob properties for metadata
                 const props = await blobClient.getProperties();
                 const blobMeta = props.metadata || {};
-                this.setMetadata(id, {
+                const metaToSave = mappedMeta || {
                     fileName: blobMeta.filename ? decodeURIComponent(blobMeta.filename) : 'file',
                     size: props.contentLength,
                     status: 'uploaded',
                     timestamp: Date.now()
-                });
+                };
+                this.setMetadata(blobName, metaToSave);
+                if (id !== blobName) {
+                    this.setMetadata(id, metaToSave);
+                }
 
-                console.log(`[StorageService] File cached locally: ${id}`);
+                console.log(`[StorageService] File cached locally: ${blobName}`);
             }
 
-            const metadata = this.getMetadata(id);
+            const metadata = mappedMeta || this.getMetadata(blobName) || this.getMetadata(id);
             const filename = metadata ? metadata.fileName : 'file';
 
             // 2. Check and handle SVG to PNG conversion for mobile compatibility
@@ -465,30 +504,35 @@ class StorageService {
     async ensureFileCached(fileId) {
         await this.ensureInitialized();
         const id = this._extractIdFromUrl(fileId);
-        const localPath = path.join(LOCAL_STORAGE_DIR, String(id));
+        const { blobName, metadata: mappedMeta } = await this._resolveBlobName(id);
+        const localPath = path.join(LOCAL_STORAGE_DIR, String(blobName));
 
         // 1. If not on disk, download from Azure Blob first
         if (!fs.existsSync(localPath)) {
-            const blobClient = this.containerClient.getBlockBlobClient(String(id));
+            const blobClient = this.containerClient.getBlockBlobClient(String(blobName));
             const exists = await blobClient.exists();
             if (!exists) throw new Error('File not found');
 
-            console.log(`[StorageService] Downloading from Azure Blob to cache: ${id}...`);
+            console.log(`[StorageService] Downloading from Azure Blob to cache: ${blobName}...`);
             await blobClient.downloadToFile(localPath);
 
             const props = await blobClient.getProperties();
             const blobMeta = props.metadata || {};
-            this.setMetadata(id, {
+            const metaToSave = mappedMeta || {
                 fileName: blobMeta.filename ? decodeURIComponent(blobMeta.filename) : 'file',
                 size: props.contentLength,
                 status: 'uploaded',
                 timestamp: Date.now()
-            });
+            };
+            this.setMetadata(blobName, metaToSave);
+            if (id !== blobName) {
+                this.setMetadata(id, metaToSave);
+            }
 
-            console.log(`[StorageService] File cached locally: ${id}`);
+            console.log(`[StorageService] File cached locally: ${blobName}`);
         }
 
-        const metadata = this.getMetadata(id);
+        const metadata = mappedMeta || this.getMetadata(blobName) || this.getMetadata(id);
         const filename = metadata ? metadata.fileName : 'file';
 
         const pngPath = await this._ensurePngVersion(localPath, filename);
