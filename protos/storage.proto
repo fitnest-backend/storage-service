@@ -5,6 +5,7 @@ package az.fitnest.storage;
 option java_multiple_files = true;
 option java_package = "az.fitnest.storage.grpc";
 option java_outer_classname = "StorageProto";
+option go_package = "fitnest-storage-backend/proto";
 
 service StorageService {
   rpc UploadFile(stream UploadFileRequest) returns (UploadFileResponse);

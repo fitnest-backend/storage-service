@@ -1,21 +1,42 @@
-FROM node:20-slim
+# Build Stage
+FROM golang:1.24-alpine AS builder
 
 WORKDIR /app
 
-# Copy package.json and package-lock.json
-COPY package*.json ./
+# Install build tools & CA certificates
+RUN apk add --no-cache git ca-certificates
 
-# Install production dependencies only
-RUN npm install --omit=dev
+# Copy dependency files
+COPY go.mod go.sum ./
+RUN go mod download
 
-# Copy the rest of the application
+# Copy source code
 COPY . .
 
-# Ensure temp directory exists for uploads
-RUN mkdir -p temp_uploads
+# Build static Go binary
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o storage-backend ./cmd/server
 
-# Expose gRPC port
-EXPOSE 9090
+# Final Runtime Stage
+FROM alpine:3.20
 
-# Start the worker
-CMD ["node", "bootstrap.js"]
+WORKDIR /app
+
+# Add runtime dependencies
+RUN apk add --no-cache ca-certificates tzdata
+
+# Create non-root user
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
+# Copy binary from builder
+COPY --from=builder /app/storage-backend /app/storage-backend
+COPY --from=builder /app/src/locales /app/src/locales
+
+# Create required directories and set ownership
+RUN mkdir -p /app/local_storage /app/temp_uploads && \
+    chown -R appuser:appgroup /app
+
+USER appuser
+
+EXPOSE 8080 9090
+
+ENTRYPOINT ["/app/storage-backend"]
