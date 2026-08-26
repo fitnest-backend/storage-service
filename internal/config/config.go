@@ -21,8 +21,8 @@ type Config struct {
 }
 
 func LoadConfig() (*Config, error) {
-	httpPort := getEnvInt("STORAGE_PORT", getEnvInt("HTTP_PORT", 8080))
-	grpcPort := getEnvInt("GRPC_PORT", 9090)
+	httpPort := getEnvInt("HTTP_PORT", 8080)
+	grpcPort := getEnvInt("STORAGE_PORT", getEnvInt("GRPC_PORT", 9090))
 	storageDir := getEnv("LOCAL_STORAGE_DIR", "local_storage")
 
 	connStr := getEnv("AZURE_STORAGE_CONNECTION_STRING", "")
